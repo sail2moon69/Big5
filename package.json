@@ -1,0 +1,56 @@
+{
+  "name": "b5-web",
+  "version": "2.2.6",
+  "description": "Static site for big five personality tests",
+  "main": "index.js",
+  "scripts": {
+    "test": "standard && ava",
+    "test-offline": "standard && ava",
+    "coverage": "nyc ava",
+    "coveralls": "nyc ava && nyc report --reporter=lcov && cat coverage/lcov.info | coveralls",
+    "standard-fix": "standard --fix",
+    "dev": "next",
+    "build": "next build",
+    "start": "next start",
+    "clear": "rm -rf .next && rm -rf dist",
+    "export": "next build && next export -o dist",
+    "refresh": "rm -rf node_modules && rm package-lock.json && npm install",
+    "deploy": "vc --prod"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zrrrzzt/b5-web.git"
+  },
+  "keywords": [
+    "big five",
+    "personality test",
+    "next.js"
+  ],
+  "author": "Geir Gåsodden <geir.gasodden@pythonia.no> (https://github.com/zrrrzzt)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/zrrrzzt/b5-web/issues"
+  },
+  "homepage": "https://github.com/zrrrzzt/b5-web#readme",
+  "engines": {
+    "node": ">= 12.19.0"
+  },
+  "dependencies": {
+    "@alheimsins/b5-johnson-120-ipip-neo-pi-r": "6.0.5",
+    "@alheimsins/b5-result-text": "5.0.5",
+    "@alheimsins/bigfive-calculate-score": "3.0.3",
+    "file-saver": "2.0.5",
+    "jcb64": "3.0.3",
+    "next": "12.2.3",
+    "next-offline": "5.0.5",
+    "react": "17.0.2",
+    "react-dom": "17.0.2",
+    "react-easy-chart": "1.0.0"
+  },
+  "devDependencies": {
+    "ava": "4.3.1",
+    "coveralls": "3.1.1",
+    "nyc": "15.1.0",
+    "standard": "17.0.0"
+  }
+}

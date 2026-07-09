@@ -1,0 +1,29 @@
+{
+  "version": 2,
+  "scope": "zrrrzzt",
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "builds": [
+    {
+      "src": "next.config.js",
+      "use": "@now/next"
+    }
+  ],
+  "routes": [
+    {	
+      "src": "^/service-worker.js$",	
+      "dest": "/_next/static/service-worker.js",
+      "headers": {
+        "cache-control": "public, max-age=43200, immutable",
+        "Service-Worker-Allowed": "/"
+      }
+    },
+    {"src": "/", "dest": "/", "headers": {
+      "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; img-src 'self' data:; frame-ancestors 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "Strict-Transport-Security": "max-age=63072000;",
+      "X-Frame-Options": "DENY",
+      "X-Content-Type-Options": "nosniff"
+    }}
+  ]
+}
