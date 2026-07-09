@@ -1,4 +1,4 @@
-import { Component } from 'react'
+import { Component, createRef } from 'react'
 import Page from '../components/Page'
 import Resume from '../components/Resume'
 import AddResults from '../components/AddResults'
@@ -19,12 +19,15 @@ export default class Result extends Component {
       results: false,
       language: 'en',
       viewLanguage: 'en',
-      chartWidth: 600
+      chartWidth: 600,
+      isGeneratingPdf: false
     }
+    this.resumeRef = createRef()
     this.addResults = this.addResults.bind(this)
     this.getWidth = this.getWidth.bind(this)
     this.loadResults = this.loadResults.bind(this)
     this.handleSaveResults = this.handleSaveResults.bind(this)
+    this.handleDownloadPdf = this.handleDownloadPdf.bind(this)
     this.handleTranslateResume = this.handleTranslateResume.bind(this)
   }
 
@@ -123,6 +126,58 @@ export default class Result extends Component {
     FileSaver.saveAs(file)
   }
 
+  async handleDownloadPdf (e) {
+    e.preventDefault()
+    const resumeRoot = this.resumeRef.current && this.resumeRef.current.firstElementChild
+    if (!resumeRoot || this.state.isGeneratingPdf) {
+      return
+    }
+    this.setState({ isGeneratingPdf: true })
+    const html2canvas = (await import('html2canvas')).default
+    const { jsPDF } = await import('jspdf')
+    // eslint-disable-next-line new-cap
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: 'a4' })
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const margin = 20
+    const usableWidth = pageWidth - margin * 2
+    const usableHeight = pageHeight - margin * 2
+    const sections = Array.from(resumeRoot.children)
+    let cursorY = margin
+    let isFirstSection = true
+    for (const section of sections) {
+      const canvas = await html2canvas(section, { scale: 1.5, useCORS: true })
+      const imageData = canvas.toDataURL('image/jpeg', 0.92)
+      const imageHeight = (canvas.height * usableWidth) / canvas.width
+      if (imageHeight <= usableHeight) {
+        if (!isFirstSection && cursorY + imageHeight > pageHeight - margin) {
+          pdf.addPage()
+          cursorY = margin
+        }
+        pdf.addImage(imageData, 'JPEG', margin, cursorY, usableWidth, imageHeight)
+        cursorY += imageHeight + margin
+      } else {
+        if (!isFirstSection) {
+          pdf.addPage()
+        }
+        let heightLeft = imageHeight
+        let position = margin
+        pdf.addImage(imageData, 'JPEG', margin, position, usableWidth, imageHeight)
+        heightLeft -= usableHeight
+        while (heightLeft > 0) {
+          position = margin - (imageHeight - heightLeft)
+          pdf.addPage()
+          pdf.addImage(imageData, 'JPEG', margin, position, usableWidth, imageHeight)
+          heightLeft -= usableHeight
+        }
+        cursorY = pageHeight
+      }
+      isFirstSection = false
+    }
+    pdf.save('b5-results.pdf')
+    this.setState({ isGeneratingPdf: false })
+  }
+
   handleTranslateResume (e) {
     e.preventDefault()
     const language = e.target.dataset.language
@@ -142,9 +197,12 @@ export default class Result extends Component {
         {this.state.resume === false ? <AddResults addResults={this.addResults} /> : null}
         {this.state.resume === false ? <LoadFile handler={this.loadResults} buttonTitle='Upload' /> : null}
         {this.state.resume !== false
-          ? <Resume data={this.state.resume} width={this.state.chartWidth} />
+          ? <div ref={this.resumeRef}><Resume data={this.state.resume} width={this.state.chartWidth} /></div>
           : null}
         {this.state.resume !== false ? <button onClick={this.handleSaveResults}>Save results</button> : null}
+        {this.state.resume !== false
+          ? <button onClick={this.handleDownloadPdf} disabled={this.state.isGeneratingPdf}>{this.state.isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}</button>
+          : null}
         <style jsx>
           {`
             h2 {
