@@ -4,6 +4,7 @@ const NAVY = '#0a0e1a'
 const MUTED = '#7a8499'
 const TEXT = '#1a1a1a'
 const BORDER = '#dcdce2'
+const WHITE = '#ffffff'
 const LOGO_URL = '/static/rdsim-favicon.png'
 const HERO_URL = '/static/hero.jpg'
 
@@ -11,7 +12,8 @@ const DOMAIN_COLORS = ['#e63946', '#f4a01c', '#457b9d', '#2a9d8f', '#6c584c']
 
 const PAGE_MARGIN = 48
 const HEADER_BOTTOM = 54
-const FOOTER_TOP_OFFSET = 36
+const FOOTER_TOP_OFFSET = 30
+const STRIP_WIDTH = 10
 
 function hexToRgb (hex) {
   const value = hex.replace('#', '')
@@ -20,6 +22,11 @@ function hexToRgb (hex) {
     parseInt(value.substring(2, 4), 16),
     parseInt(value.substring(4, 6), 16)
   ]
+}
+
+function isLightColor (hex) {
+  const [r, g, b] = hexToRgb(hex)
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150
 }
 
 async function loadImageAsDataUrl (url) {
@@ -84,18 +91,26 @@ export async function loadCoverImage (url, targetWidth, targetHeight) {
   return canvas.toDataURL('image/jpeg', 0.85)
 }
 
-function drawHeader (pdf, pageWidth, logoDataUrl, participantName) {
+function drawHeader (pdf, pageWidth, logoDataUrl, participantName, pageNumber) {
   if (logoDataUrl) {
-    pdf.addImage(logoDataUrl, 'PNG', PAGE_MARGIN, 18, 18, 18)
+    pdf.addImage(logoDataUrl, 'PNG', PAGE_MARGIN, 16, 16, 16)
   }
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(11)
+  pdf.setFontSize(10.5)
   pdf.setTextColor(...hexToRgb(NAVY))
-  pdf.text('RD-SIM.DE', PAGE_MARGIN + (logoDataUrl ? 24 : 0), 30)
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(9)
-  pdf.setTextColor(...hexToRgb(MUTED))
-  pdf.text(participantName ? `Big Five Test · ${participantName}` : 'Big Five Persönlichkeitstest', pageWidth - PAGE_MARGIN, 30, { align: 'right' })
+  pdf.text('RD-SIM.DE', PAGE_MARGIN + (logoDataUrl ? 22 : 0), 27)
+  if (participantName) {
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8)
+    pdf.setTextColor(...hexToRgb(MUTED))
+    pdf.text(participantName, PAGE_MARGIN + (logoDataUrl ? 22 : 0), 37)
+  }
+  if (pageNumber) {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(15)
+    pdf.setTextColor(...hexToRgb(NAVY))
+    pdf.text(String(pageNumber).padStart(2, '0'), pageWidth - PAGE_MARGIN, 32, { align: 'right' })
+  }
   pdf.setDrawColor(...hexToRgb(RED))
   pdf.setLineWidth(1.5)
   pdf.line(PAGE_MARGIN, HEADER_BOTTOM - 8, pageWidth - PAGE_MARGIN, HEADER_BOTTOM - 8)
@@ -103,7 +118,8 @@ function drawHeader (pdf, pageWidth, logoDataUrl, participantName) {
 
 function newPage (pdf, pageWidth, logoDataUrl, participantName) {
   pdf.addPage()
-  drawHeader(pdf, pageWidth, logoDataUrl, participantName)
+  const pageNumber = pdf.internal.getNumberOfPages() - 1
+  drawHeader(pdf, pageWidth, logoDataUrl, participantName, pageNumber)
   return HEADER_BOTTOM + 24
 }
 
@@ -112,6 +128,121 @@ function ensureSpace (pdf, y, needed, pageWidth, pageHeight, logoDataUrl, partic
     return newPage(pdf, pageWidth, logoDataUrl, participantName)
   }
   return y
+}
+
+function drawSplitHeadline (pdf, regularText, boldText, x, y, fontSize, color) {
+  pdf.setTextColor(...hexToRgb(color))
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(fontSize)
+  const regularWithSpace = regularText ? `${regularText} ` : ''
+  if (regularWithSpace) {
+    pdf.text(regularWithSpace, x, y)
+  }
+  const regularWidth = regularWithSpace ? pdf.getTextWidth(regularWithSpace) : 0
+  pdf.setFont('helvetica', 'bold')
+  pdf.text(boldText, x + regularWidth, y)
+}
+
+function drawLabelBar (pdf, text, x, y, width, color) {
+  const height = 22
+  const textColor = isLightColor(color) ? TEXT : WHITE
+  pdf.setFillColor(...hexToRgb(color))
+  pdf.rect(x, y, width, height, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(10.5)
+  pdf.setTextColor(...hexToRgb(textColor))
+  pdf.text(text.toUpperCase(), x + 12, y + height / 2 + 3.5)
+  return y + height
+}
+
+function drawDomainBand (pdf, pageWidth, y0, contentWidth, color, eyebrow, title, subtitle) {
+  const textColor = isLightColor(color) ? TEXT : WHITE
+  const x = PAGE_MARGIN
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(18)
+  const titleLines = pdf.splitTextToSize(title.toUpperCase(), contentWidth)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9.5)
+  const subtitleLines = subtitle ? pdf.splitTextToSize(subtitle, contentWidth) : []
+
+  const eyebrowY = y0 + 30
+  const titleY = eyebrowY + 22
+  const subtitleStartY = titleY + (titleLines.length - 1) * 21 + 20
+  const bandHeight = (subtitleStartY - y0) + Math.max(subtitleLines.length - 1, 0) * 12 + 22
+
+  pdf.setFillColor(...hexToRgb(color))
+  pdf.rect(0, y0, pageWidth, bandHeight, 'F')
+
+  pdf.setTextColor(...hexToRgb(textColor))
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8.5)
+  pdf.text(eyebrow.toUpperCase(), x, eyebrowY)
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(18)
+  pdf.text(titleLines, x, titleY)
+
+  if (subtitleLines.length) {
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(9.5)
+    pdf.text(subtitleLines, x, subtitleStartY)
+  }
+
+  return y0 + bandHeight + 26
+}
+
+function drawDotLeader (pdf, x1, x2, y) {
+  pdf.setFillColor(...hexToRgb(BORDER))
+  for (let dx = x1; dx < x2; dx += 4) {
+    pdf.circle(dx, y - 2, 0.4, 'F')
+  }
+}
+
+function drawTableOfContents (pdf, { contentWidth, sections }) {
+  let y = HEADER_BOTTOM + 44
+
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(...hexToRgb(ORANGE))
+  pdf.text('IHR ERGEBNISBERICHT IM ÜBERBLICK', PAGE_MARGIN, y)
+  y += 26
+
+  drawSplitHeadline(pdf, 'INHALT', 'UND STRUKTUR', PAGE_MARGIN, y, 26, TEXT)
+  y += 46
+
+  sections.forEach(section => {
+    const swatchSize = 10
+    pdf.setFillColor(...hexToRgb(section.color))
+    pdf.rect(PAGE_MARGIN, y - 9, swatchSize, swatchSize, 'F')
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(11)
+    pdf.setTextColor(...hexToRgb(TEXT))
+    const titleUpper = section.title.toUpperCase()
+    pdf.text(titleUpper, PAGE_MARGIN + swatchSize + 10, y)
+
+    const pageLabel = section.displayStart === section.displayEnd
+      ? String(section.displayStart)
+      : `${section.displayStart}–${section.displayEnd}`
+    const labelWidth = pdf.getTextWidth(pageLabel)
+    const titleWidth = pdf.getTextWidth(titleUpper)
+    const leaderStart = PAGE_MARGIN + swatchSize + 10 + titleWidth + 8
+    const leaderEnd = PAGE_MARGIN + contentWidth - labelWidth - 8
+    if (leaderEnd > leaderStart) {
+      drawDotLeader(pdf, leaderStart, leaderEnd, y)
+    }
+    pdf.setTextColor(...hexToRgb(MUTED))
+    pdf.text(pageLabel, PAGE_MARGIN + contentWidth, y, { align: 'right' })
+
+    y += 16
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8.5)
+    pdf.setTextColor(...hexToRgb(MUTED))
+    pdf.text(section.bullets.join('   ·   '), PAGE_MARGIN + swatchSize + 10, y)
+    y += 28
+  })
 }
 
 function drawBarChart (pdf, { x, y, width, height, items, maxValue, colors }) {
@@ -157,6 +288,10 @@ function drawParagraphs (pdf, text, x, y, width, pageWidth, pageHeight, logoData
   paragraphs.forEach(paragraph => {
     const lines = pdf.splitTextToSize(paragraph, width)
     cursorY = ensureSpace(pdf, cursorY, lines.length * lineHeight, pageWidth, pageHeight, logoDataUrl, participantName)
+    // ensureSpace() may have paged and redrawn the header, which mutates the font state - restore ours before drawing
+    pdf.setFont('helvetica', options.bold ? 'bold' : 'normal')
+    pdf.setFontSize(options.fontSize || 9.5)
+    pdf.setTextColor(...hexToRgb(options.color || TEXT))
     pdf.text(lines, x, cursorY)
     cursorY += lines.length * lineHeight + 6
   })
@@ -205,39 +340,71 @@ export default async function generatePdfReport ({ resume, viewLanguage, partici
     pdf.rect(0, 0, pageWidth, pageHeight, 'F')
   }
   if (logoDataUrl) {
-    pdf.addImage(logoDataUrl, 'PNG', pageWidth / 2 - 32, 150, 64, 64)
+    pdf.addImage(logoDataUrl, 'PNG', pageWidth - PAGE_MARGIN - 22, 34, 22, 22)
   }
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(34)
-  pdf.setTextColor(255, 255, 255)
-  pdf.text('BIG FIVE', pageWidth / 2, 260, { align: 'center' })
-  pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(11)
+  pdf.setTextColor(255, 255, 255)
+  pdf.text('RD-SIM.DE', pageWidth - PAGE_MARGIN - (logoDataUrl ? 30 : 0), 50, { align: 'right' })
+
+  const coverTitleY = pageHeight - 230
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(10)
   pdf.setTextColor(...hexToRgb(ORANGE))
-  pdf.text('PERSÖNLICHKEITSTEST · ERGEBNISBERICHT', pageWidth / 2, 286, { align: 'center' })
+  pdf.text('BIG FIVE TEST · PERSÖNLICHKEITSANALYSE', PAGE_MARGIN, coverTitleY)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(30)
+  pdf.setTextColor(255, 255, 255)
+  pdf.text('IHR PERSÖNLICHER', PAGE_MARGIN, coverTitleY + 42)
+  pdf.setFont('helvetica', 'bold')
+  pdf.text('ERGEBNISBERICHT', PAGE_MARGIN, coverTitleY + 78)
+
   pdf.setDrawColor(...hexToRgb(RED))
   pdf.setLineWidth(2)
-  pdf.line(pageWidth / 2 - 30, 306, pageWidth / 2 + 30, 306)
+  pdf.line(PAGE_MARGIN, coverTitleY + 96, PAGE_MARGIN + 60, coverTitleY + 96)
+
+  let coverInfoY = coverTitleY + 128
   if (participantName) {
     pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(13)
+    pdf.setFontSize(14)
     pdf.setTextColor(255, 255, 255)
-    pdf.text(`Ergebnis für ${participantName}`, pageWidth / 2, 332, { align: 'center' })
-    pdf.setFont('helvetica', 'normal')
+    pdf.text(participantName, PAGE_MARGIN, coverInfoY)
+    coverInfoY += 20
   }
+  pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(10)
-  pdf.setTextColor(220, 222, 230)
-  pdf.text(`Erstellt am ${dateStr}`, pageWidth / 2, participantName ? 356 : 334, { align: 'center' })
-  pdf.setFontSize(9)
-  pdf.setTextColor(...hexToRgb(MUTED))
-  pdf.text('rd-sim.de', pageWidth / 2, pageHeight - 48, { align: 'center' })
+  pdf.setTextColor(210, 213, 222)
+  pdf.text(`Erstellt am ${dateStr}`, PAGE_MARGIN, coverInfoY)
+
+  // --- Reserve a table-of-contents page; filled in once we know how the report paginates ---
+  pdf.addPage()
+  const tocPage = pdf.internal.getNumberOfPages()
+  drawHeader(pdf, pageWidth, logoDataUrl, participantName, tocPage - 1)
 
   // --- Overview page ---
   let y = newPage(pdf, pageWidth, logoDataUrl, participantName)
-  y = drawSectionHeading(pdf, 'Übersicht', PAGE_MARGIN, y, RED)
+  const overviewStartPage = pdf.internal.getNumberOfPages()
+  const sections = [{
+    title: 'Übersicht',
+    color: RED,
+    startPage: overviewStartPage,
+    bullets: ['Gesamtprofil aller fünf Dimensionen', 'Zentrale Kennzahlen im Überblick']
+  }]
 
-  const overviewItems = resume.map((domain, index) => ({ label: domain.title, value: domain.score }))
-  const chartHeight = 170
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(...hexToRgb(ORANGE))
+  pdf.text('BIG FIVE TEST · DIE ERGEBNISSE AUF EINEN BLICK', PAGE_MARGIN, y)
+  y += 24
+  drawSplitHeadline(pdf, 'IHR', 'PROFIL', PAGE_MARGIN, y, 24, TEXT)
+  y += 28
+
+  y = drawLabelBar(pdf, 'Alle fünf Dimensionen im Vergleich', PAGE_MARGIN, y, contentWidth, RED)
+  y += 30
+
+  const overviewItems = resume.map(domain => ({ label: domain.title, value: domain.score }))
+  const chartHeight = 160
   y = ensureSpace(pdf, y, chartHeight + 40, pageWidth, pageHeight, logoDataUrl, participantName)
   drawBarChart(pdf, {
     x: PAGE_MARGIN + 20,
@@ -281,15 +448,16 @@ export default async function generatePdfReport ({ resume, viewLanguage, partici
   // --- Domain detail pages ---
   resume.forEach((domain, index) => {
     const color = DOMAIN_COLORS[index % DOMAIN_COLORS.length]
-    y = newPage(pdf, pageWidth, logoDataUrl, participantName)
-    y = drawSectionHeading(pdf, domain.title, PAGE_MARGIN, y, color)
+    newPage(pdf, pageWidth, logoDataUrl, participantName)
+    const startPage = pdf.internal.getNumberOfPages()
+    sections.push({
+      title: domain.title,
+      color,
+      startPage,
+      bullets: domain.facets && domain.facets.length ? ['Ausprägung & Score', 'Facetten im Detail'] : ['Ausprägung & Score']
+    })
 
-    pdf.setFont('helvetica', 'italic')
-    pdf.setFontSize(9.5)
-    pdf.setTextColor(...hexToRgb(MUTED))
-    const shortDescLines = pdf.splitTextToSize(domain.shortDescription, contentWidth)
-    pdf.text(shortDescLines, PAGE_MARGIN, y)
-    y += shortDescLines.length * 12 + 10
+    y = drawDomainBand(pdf, pageWidth, HEADER_BOTTOM, contentWidth, color, `Big Five Test · Trait ${index + 1}/5`, domain.title, domain.shortDescription)
 
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(10)
@@ -335,19 +503,37 @@ export default async function generatePdfReport ({ resume, viewLanguage, partici
     }
   })
 
-  // --- Footer pass (skip cover page) ---
   const totalPages = pdf.internal.getNumberOfPages()
+  sections.forEach((section, index) => {
+    section.endPage = index + 1 < sections.length ? sections[index + 1].startPage - 1 : totalPages
+    section.displayStart = section.startPage - 1
+    section.displayEnd = section.endPage - 1
+  })
+
+  // --- Footer pass (skip cover page) ---
   for (let i = 2; i <= totalPages; i++) {
     pdf.setPage(i)
     pdf.setDrawColor(...hexToRgb(BORDER))
     pdf.setLineWidth(0.5)
     pdf.line(PAGE_MARGIN, pageHeight - FOOTER_TOP_OFFSET, pageWidth - PAGE_MARGIN, pageHeight - FOOTER_TOP_OFFSET)
     pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(8)
+    pdf.setFontSize(7.5)
     pdf.setTextColor(...hexToRgb(MUTED))
-    pdf.text('rd-sim.de · Big Five Test', PAGE_MARGIN, pageHeight - 20)
-    pdf.text(`Seite ${i - 1} von ${totalPages - 1}`, pageWidth - PAGE_MARGIN, pageHeight - 20, { align: 'right' })
+    pdf.text('RD-SIM.DE  ·  BIG FIVE TEST', pageWidth / 2, pageHeight - 18, { align: 'center' })
   }
+
+  // --- Accent strip: tags every page of a section with its domain color ---
+  sections.forEach(section => {
+    for (let p = section.startPage; p <= section.endPage; p++) {
+      pdf.setPage(p)
+      pdf.setFillColor(...hexToRgb(section.color))
+      pdf.rect(pageWidth - STRIP_WIDTH, 0, STRIP_WIDTH, pageHeight, 'F')
+    }
+  })
+
+  // --- Table of contents content ---
+  pdf.setPage(tocPage)
+  drawTableOfContents(pdf, { contentWidth, sections })
 
   const fileSlug = participantName
     ? participantName.trim().toLowerCase().replace(/[^a-z0-9äöüß]+/gi, '-').replace(/^-+|-+$/g, '')
