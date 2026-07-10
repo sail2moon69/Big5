@@ -33,7 +33,7 @@ async function loadImageAsDataUrl (url) {
   })
 }
 
-async function loadCoverImage (url, targetWidth, targetHeight) {
+export async function loadCoverImage (url, targetWidth, targetHeight) {
   const image = await new Promise((resolve, reject) => {
     const element = new window.Image()
     element.crossOrigin = 'anonymous'
