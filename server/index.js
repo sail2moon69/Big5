@@ -1,13 +1,27 @@
-/* global fetch */
 const express = require('express')
+const nodemailer = require('nodemailer')
 
 const PORT = process.env.PORT || 4001
-const BREVO_API_KEY = process.env.BREVO_API_KEY
+const SMTP_HOST = process.env.SMTP_HOST
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587)
+const SMTP_USER = process.env.SMTP_USER
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD
 const MAIL_FROM_ADDRESS = process.env.MAIL_FROM_ADDRESS
 const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'Big Five Test | rd-sim.de'
 
 const MAX_RECIPIENTS = 200
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function isConfigured () {
+  return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASSWORD && MAIL_FROM_ADDRESS)
+}
+
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_PORT === 465,
+  auth: SMTP_USER ? { user: SMTP_USER, pass: SMTP_PASSWORD } : undefined
+})
 
 const app = express()
 app.use(express.json({ limit: '256kb' }))
@@ -32,32 +46,17 @@ function buildEmailBody (name, link) {
 }
 
 async function sendEmail ({ name, email, link, ccEmail }) {
-  const payload = {
-    sender: { email: MAIL_FROM_ADDRESS, name: MAIL_FROM_NAME },
-    to: [{ email, name }],
+  await transporter.sendMail({
+    from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`,
+    to: `"${name}" <${email}>`,
+    cc: ccEmail || undefined,
     subject: 'Ihre persönliche Einladung zum Big Five Test',
-    textContent: buildEmailBody(name, link)
-  }
-  if (ccEmail) {
-    payload.cc = [{ email: ccEmail }]
-  }
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      accept: 'application/json',
-      'api-key': BREVO_API_KEY
-    },
-    body: JSON.stringify(payload)
+    text: buildEmailBody(name, link)
   })
-  if (!response.ok) {
-    const errorBody = await response.text()
-    throw new Error(`Brevo API error ${response.status}: ${errorBody}`)
-  }
 }
 
 app.post('/send-invites', async (req, res) => {
-  if (!BREVO_API_KEY || !MAIL_FROM_ADDRESS) {
+  if (!isConfigured()) {
     res.status(500).json({ error: 'Mail service is not configured on the server' })
     return
   }
@@ -95,7 +94,7 @@ app.post('/send-invites', async (req, res) => {
 })
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, configured: Boolean(BREVO_API_KEY && MAIL_FROM_ADDRESS) })
+  res.json({ ok: true, configured: isConfigured() })
 })
 
 app.listen(PORT, '127.0.0.1', () => {

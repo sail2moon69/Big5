@@ -52,7 +52,10 @@ jobs:
           rsync -avz --delete --exclude node_modules server/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/invite-api/"
           {
             echo "PORT=4001"
-            printf 'BREVO_API_KEY=%s\n' '${{ secrets.BREVO_API_KEY }}'
+            printf 'SMTP_HOST=%s\n' '${{ secrets.SMTP_HOST }}'
+            printf 'SMTP_PORT=%s\n' '${{ secrets.SMTP_PORT }}'
+            printf 'SMTP_USER=%s\n' '${{ secrets.SMTP_USER }}'
+            printf 'SMTP_PASSWORD=%s\n' '${{ secrets.SMTP_PASSWORD }}'
             printf 'MAIL_FROM_ADDRESS=%s\n' '${{ secrets.MAIL_FROM_ADDRESS }}'
             echo "MAIL_FROM_NAME=Big Five Test | rd-sim.de"
           } > /tmp/invite-api.env
