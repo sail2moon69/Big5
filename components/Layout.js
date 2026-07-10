@@ -180,6 +180,31 @@ export default ({ children }) => (
         .rdsim-input::placeholder {
           color: var(--rdsim-muted);
         }
+        .rdsim-note {
+          background: rgba(244, 160, 28, 0.08);
+          border: 1px solid rgba(244, 160, 28, 0.35);
+          border-left: 4px solid var(--rdsim-orange);
+          padding: 1rem 1.25rem;
+          margin: 1.2rem 0;
+          text-align: left;
+        }
+        .rdsim-note p {
+          margin: 0;
+          color: var(--rdsim-text);
+        }
+        .rdsim-note strong {
+          color: var(--rdsim-orange);
+        }
+        .rdsim-subhead {
+          font-size: 1rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          margin: 1.5rem 0 0.7rem;
+        }
+        .rdsim-card .rdsim-subhead:first-child {
+          margin-top: 0;
+        }
         @media screen and (max-width: 800px) {
           .container {
             grid-template-columns: 3% 1fr 3%;
