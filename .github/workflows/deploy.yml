@@ -38,3 +38,10 @@ jobs:
       - name: Deploy via rsync
         run: |
           rsync -avz --delete dist/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/html/"
+
+      - name: Deploy invite.htpasswd (outside the public web root)
+        run: |
+          printf '%s\n' '${{ secrets.INVITE_HTPASSWD_LINE }}' > /tmp/invite.htpasswd
+          chmod 644 /tmp/invite.htpasswd
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p /var/www/big5.rd-sim.de/secrets"
+          rsync -avz /tmp/invite.htpasswd "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/secrets/invite.htpasswd"

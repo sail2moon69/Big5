@@ -18,9 +18,10 @@ const Navbar = () => (
     </ul>
     <ul className='right'>
       <li>
-        <Link href='/invite'>
-          <a>Einladung</a>
-        </Link>
+        {/* Plain anchor on purpose: /invite is password-protected via Nginx Basic
+            Auth at the server. A next/link client-side navigation would skip the
+            HTTP request entirely and bypass that check. */}
+        <a href='/invite'>Einladung</a>
       </li>
       <li>
         <Link href='/result'>
