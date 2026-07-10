@@ -5,6 +5,7 @@ const MUTED = '#7a8499'
 const TEXT = '#1a1a1a'
 const BORDER = '#dcdce2'
 const LOGO_URL = '/static/rdsim-favicon.png'
+const HERO_URL = '/static/hero.jpg'
 
 const DOMAIN_COLORS = ['#e63946', '#f4a01c', '#457b9d', '#2a9d8f', '#6c584c']
 
@@ -30,6 +31,57 @@ async function loadImageAsDataUrl (url) {
     reader.onerror = reject
     reader.readAsDataURL(blob)
   })
+}
+
+async function loadCoverImage (url, targetWidth, targetHeight) {
+  const image = await new Promise((resolve, reject) => {
+    const element = new window.Image()
+    element.crossOrigin = 'anonymous'
+    element.onload = () => resolve(element)
+    element.onerror = reject
+    element.src = url
+  })
+
+  const canvas = window.document.createElement('canvas')
+  canvas.width = targetWidth
+  canvas.height = targetHeight
+  const ctx = canvas.getContext('2d')
+
+  const targetAspect = targetWidth / targetHeight
+  const sourceAspect = image.width / image.height
+  let sx, sy, sw, sh
+  if (sourceAspect > targetAspect) {
+    sh = image.height
+    sw = sh * targetAspect
+    sx = (image.width - sw) / 2
+    sy = 0
+  } else {
+    sw = image.width
+    sh = sw / targetAspect
+    sx = 0
+    sy = (image.height - sh) / 2
+  }
+  ctx.drawImage(image, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight)
+
+  // dark vignette/gradient overlay so the title text stays legible, matching the website hero
+  const verticalFade = ctx.createLinearGradient(0, 0, 0, targetHeight)
+  verticalFade.addColorStop(0, 'rgba(6, 9, 15, 0.55)')
+  verticalFade.addColorStop(0.35, 'rgba(6, 9, 15, 0.4)')
+  verticalFade.addColorStop(0.75, 'rgba(6, 9, 15, 0.8)')
+  verticalFade.addColorStop(1, 'rgba(6, 9, 15, 0.97)')
+  ctx.fillStyle = verticalFade
+  ctx.fillRect(0, 0, targetWidth, targetHeight)
+
+  const vignette = ctx.createRadialGradient(
+    targetWidth / 2, targetHeight / 2, 0,
+    targetWidth / 2, targetHeight / 2, Math.max(targetWidth, targetHeight) * 0.65
+  )
+  vignette.addColorStop(0, 'rgba(6, 9, 15, 0)')
+  vignette.addColorStop(1, 'rgba(6, 9, 15, 0.55)')
+  ctx.fillStyle = vignette
+  ctx.fillRect(0, 0, targetWidth, targetHeight)
+
+  return canvas.toDataURL('image/jpeg', 0.85)
 }
 
 function drawHeader (pdf, pageWidth, logoDataUrl) {
@@ -138,9 +190,20 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
 
   const dateStr = new Date().toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' })
 
+  let coverImageDataUrl = null
+  try {
+    coverImageDataUrl = await loadCoverImage(HERO_URL, Math.round(pageWidth * 2), Math.round(pageHeight * 2))
+  } catch (error) {
+    coverImageDataUrl = null
+  }
+
   // --- Cover page ---
-  pdf.setFillColor(...hexToRgb(NAVY))
-  pdf.rect(0, 0, pageWidth, pageHeight, 'F')
+  if (coverImageDataUrl) {
+    pdf.addImage(coverImageDataUrl, 'JPEG', 0, 0, pageWidth, pageHeight)
+  } else {
+    pdf.setFillColor(...hexToRgb(NAVY))
+    pdf.rect(0, 0, pageWidth, pageHeight, 'F')
+  }
   if (logoDataUrl) {
     pdf.addImage(logoDataUrl, 'PNG', pageWidth / 2 - 32, 150, 64, 64)
   }
