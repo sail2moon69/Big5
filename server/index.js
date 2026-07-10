@@ -59,6 +59,9 @@ function buildEmailText (name, link) {
     '- Die erste, spontane Reaktion ist meist die zutreffendste.',
     '- Planen Sie ca. 15-20 Minuten ein und beantworten Sie den Test möglichst am Stück.',
     '',
+    'Nach dem Test',
+    'Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.',
+    '',
     'Datenschutz: Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte - niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.',
     '',
     'Viele Grüße',
@@ -122,6 +125,11 @@ function buildEmailHtml (name, link) {
                 <li>Die erste, spontane Reaktion ist meist die zutreffendste.</li>
                 <li>Planen Sie ca. 15–20 Minuten ein und beantworten Sie den Test möglichst am Stück.</li>
               </ul>
+
+              <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:0.5px;color:#1a1a1a;margin:0 0 8px;">Nach dem Test</h2>
+              <div style="background-color:#f4f7fb;border-left:4px solid #0a0e1a;padding:14px 18px;margin:0 0 20px;font-size:14px;color:#333333;line-height:1.6;">
+                Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.
+              </div>
 
               <div style="background-color:#fff8ec;border-left:4px solid #f4a01c;padding:14px 18px;font-size:13px;color:#333333;line-height:1.6;">
                 <strong style="color:#c97a00;">Datenschutz:</strong> Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte – niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.
