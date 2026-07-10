@@ -4,13 +4,17 @@ const Navbar = () => (
   <nav>
     <ul className='left'>
       <li>
+        <a href='https://rd-sim.de' className='brand-link'>
+          <img style={{ width: '28px' }} src='/static/rdsim-favicon.png' />
+          <span className='brand'>rd-sim<span className='dot'>.de</span></span>
+        </a>
+      </li>
+      <li className='sep'>&#8226;</li>
+      <li>
         <Link href='/'>
-          <a>
-            <img style={{ width: '32px' }} src='/static/favicon-32x32.png' />
-          </a>
+          <a className='app-name'>Big Five Test</a>
         </Link>
       </li>
-      <li><span className='app-name'>Big Five Test</span></li>
     </ul>
     <ul className='right'>
       <li>
@@ -25,18 +29,18 @@ const Navbar = () => (
       </li>
     </ul>
     <style jsx>{`
-      img {
-        width: 32px;
-      }
       nav {
         grid-area: header;
+        position: sticky;
+        top: 0;
+        z-index: 10;
         display: flex;
         justify-content: space-between;
-        background: black;
-        color: white;
+        background: var(--rdsim-navy);
+        color: var(--rdsim-text);
+        border-bottom: 1px solid var(--rdsim-border);
         margin-bottom: 20px;
         height: 60px;
-        box-shadow: 0 4px 5px 0 rgba(0, 0, 0, .14), 0 1px 10px 0 rgba(0, 0, 0, .12), 0 2px 4px -1px rgba(0, 0, 0, .2);
       }
       ul {
         margin: 0;
@@ -56,19 +60,39 @@ const Navbar = () => (
         margin: 10px;
         align-self: center;
       }
+      li.sep {
+        color: var(--rdsim-muted);
+        font-size: 16px;
+      }
+      .brand-link {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .brand {
+        font-weight: 900;
+        letter-spacing: -0.01em;
+        text-transform: uppercase;
+      }
+      .brand .dot {
+        color: var(--rdsim-red);
+      }
       a {
         text-transform: uppercase;
         text-decoration: none;
-        color: white;
+        color: var(--rdsim-text);
+        letter-spacing: 0.05em;
+        font-size: 14px;
+        font-weight: 700;
       }
       a:hover {
-        color: #6AC4AE;
-        text-decoration: underline;
+        color: var(--rdsim-orange);
       }
-      @media screen and (max-width: 400px) {
-        .app-name {
+      @media screen and (max-width: 500px) {
+        .app-name, .sep {
           display: none;
         }
+      }
     `}
     </style>
   </nav>

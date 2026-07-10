@@ -124,38 +124,17 @@ export default class Compare extends Component {
   render () {
     return (
       <Page>
-        <h1 className='no-print'>Big five comparison</h1>
-        {languages.map((lang, index) => <button data-language={lang.id} onClick={this.handleTranslate} className={lang === this.state.viewLanguage ? 'isActive no-print' : 'no-print'} key={index}>{lang.text}</button>)}
+        <div className='rdsim-eyebrow no-print'>Persönlichkeitstest</div>
+        <h1 className='rdsim-title no-print'>Vergleich<span className='dot'>.</span></h1>
+        {languages.map((lang, index) => <button data-language={lang.id} onClick={this.handleTranslate} className={`rdsim-btn rdsim-btn-secondary no-print${lang === this.state.viewLanguage ? ' isActive' : ''}`} key={index}>{lang.text}</button>)}
         <AddComparison addComparison={this.addComparison} />
         <LoadFile handler={this.loadResult} buttonTitle='Load result' />
         {this.state.scores ? <Comparisons data={this.state.scores} chartWidth={this.state.chartWidth} /> : null}
-        {this.state.comparisons.length > 0 ? <button onClick={this.handleSaveComparison}>Save comparison</button> : null}
+        {this.state.comparisons.length > 0 ? <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleSaveComparison}>Save comparison</button> : null}
         {this.state.comparisons.length === 0 ? <LoadFile handler={this.loadComparison} buttonTitle='Load comparison' /> : null}
         <style jsx>
           {`
-            button {
-              background-color: white;
-              border-radius: 2px;
-              color: black;
-              padding: 15px 32px;
-              text-align: center;
-              text-decoration: none;
-              display: inline-block;
-              font-size: 16px;
-              width: 200px;
-              margin: 10px;
-              cursor: pointer;
-            }
-            button:focus {
-              outline:0;
-            }
-            button:active {
-              outline: 0;
-            }
-            .isActive {
-              background: yellow;
-            }
-            @media print {    
+            @media print {
               .no-print, .no-print * {
                 display: none !important;
               }
