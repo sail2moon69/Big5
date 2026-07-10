@@ -3,17 +3,28 @@ import Head from 'next/head'
 import Page from '../components/Page'
 import Item from '../components/Item'
 const { getItems } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
-const { pack } = require('jcb64')
+const { pack, unpack } = require('jcb64')
 
 const Test = props => {
   const [answers, setAnswers] = useState({})
   const [items, setItems] = useState(false)
   const [nowShowing, setNowShowing] = useState(false)
   const [selectedLanguage, setSelectedLanguage] = useState('en')
+  const [participantName, setParticipantName] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search.replace('?', ''))
-    const language = params.get('language') || 'en'
+    const inviteCode = params.get('invite')
+    let language = params.get('language') || 'en'
+    if (inviteCode) {
+      try {
+        const invite = unpack(inviteCode)
+        language = invite.language || language
+        setParticipantName(invite.name)
+      } catch (error) {
+        setParticipantName(false)
+      }
+    }
     const items = getItems(language, true)
     setSelectedLanguage(language)
     items.reverse()
@@ -53,6 +64,9 @@ const Test = props => {
       language: selectedLanguage,
       answers: choices
     }
+    if (participantName) {
+      result.name = participantName
+    }
     const b64 = pack(result)
     window.location = `/result?id=${b64}`
   }
@@ -65,12 +79,22 @@ const Test = props => {
       <Page>
         <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
         <h1 className='rdsim-title'>Big Five<span className='dot'>.</span></h1>
+        {participantName ? <p className='greeting'>Hallo, <strong>{participantName}</strong>!</p> : null}
         {items !== false && nowShowing === items.length
           ? <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit}>Submit</button>
           : null}
         {items !== false
           ? items.map(item => parseInt(item.num, 10) <= nowShowing + 1 ? <Item data={item} answers={answers} setAnswer={setAnswer} key={item.id} /> : null)
           : null}
+        <style jsx>
+          {`
+            .greeting {
+              text-align: center;
+              color: var(--rdsim-text);
+              margin-bottom: 10px;
+            }
+          `}
+        </style>
       </Page>
     </>
   )

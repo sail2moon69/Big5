@@ -132,7 +132,8 @@ export default class Result extends Component {
       return
     }
     this.setState({ isGeneratingPdf: true })
-    await generatePdfReport({ resume: this.state.resume, viewLanguage: this.state.viewLanguage })
+    const participantName = this.state.results && this.state.results.name
+    await generatePdfReport({ resume: this.state.resume, viewLanguage: this.state.viewLanguage, participantName })
     this.setState({ isGeneratingPdf: false })
   }
 
@@ -152,6 +153,7 @@ export default class Result extends Component {
       <Page>
         <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
         <h1 className='rdsim-title'>Ergebnis<span className='dot'>.</span></h1>
+        {this.state.results && this.state.results.name ? <p className='greeting'>für <strong>{this.state.results.name}</strong></p> : null}
         {getInfo().languages.map((lang, index) => <button data-language={lang.id} onClick={this.handleTranslateResume} className={`rdsim-btn rdsim-btn-secondary${lang.id === this.state.viewLanguage ? ' isActive' : ''}`} key={index}>{lang.text}</button>)}
         {this.state.resume === false ? <AddResults addResults={this.addResults} /> : null}
         {this.state.resume === false ? <LoadFile handler={this.loadResults} buttonTitle='Upload' /> : null}
@@ -162,6 +164,15 @@ export default class Result extends Component {
         {this.state.resume !== false
           ? <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleDownloadPdf} disabled={this.state.isGeneratingPdf}>{this.state.isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}</button>
           : null}
+        <style jsx>
+          {`
+            .greeting {
+              text-align: center;
+              color: var(--rdsim-text);
+              margin-bottom: 10px;
+            }
+          `}
+        </style>
       </Page>
     )
   }

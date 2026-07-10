@@ -84,7 +84,7 @@ async function loadCoverImage (url, targetWidth, targetHeight) {
   return canvas.toDataURL('image/jpeg', 0.85)
 }
 
-function drawHeader (pdf, pageWidth, logoDataUrl) {
+function drawHeader (pdf, pageWidth, logoDataUrl, participantName) {
   if (logoDataUrl) {
     pdf.addImage(logoDataUrl, 'PNG', PAGE_MARGIN, 18, 18, 18)
   }
@@ -95,21 +95,21 @@ function drawHeader (pdf, pageWidth, logoDataUrl) {
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9)
   pdf.setTextColor(...hexToRgb(MUTED))
-  pdf.text('Big Five Persönlichkeitstest', pageWidth - PAGE_MARGIN, 30, { align: 'right' })
+  pdf.text(participantName ? `Big Five Test · ${participantName}` : 'Big Five Persönlichkeitstest', pageWidth - PAGE_MARGIN, 30, { align: 'right' })
   pdf.setDrawColor(...hexToRgb(RED))
   pdf.setLineWidth(1.5)
   pdf.line(PAGE_MARGIN, HEADER_BOTTOM - 8, pageWidth - PAGE_MARGIN, HEADER_BOTTOM - 8)
 }
 
-function newPage (pdf, pageWidth, logoDataUrl) {
+function newPage (pdf, pageWidth, logoDataUrl, participantName) {
   pdf.addPage()
-  drawHeader(pdf, pageWidth, logoDataUrl)
+  drawHeader(pdf, pageWidth, logoDataUrl, participantName)
   return HEADER_BOTTOM + 24
 }
 
-function ensureSpace (pdf, y, needed, pageWidth, pageHeight, logoDataUrl) {
+function ensureSpace (pdf, y, needed, pageWidth, pageHeight, logoDataUrl, participantName) {
   if (y + needed > pageHeight - FOOTER_TOP_OFFSET) {
-    return newPage(pdf, pageWidth, logoDataUrl)
+    return newPage(pdf, pageWidth, logoDataUrl, participantName)
   }
   return y
 }
@@ -147,7 +147,7 @@ function drawBarChart (pdf, { x, y, width, height, items, maxValue, colors }) {
   })
 }
 
-function drawParagraphs (pdf, text, x, y, width, pageWidth, pageHeight, logoDataUrl, options = {}) {
+function drawParagraphs (pdf, text, x, y, width, pageWidth, pageHeight, logoDataUrl, participantName, options = {}) {
   const lineHeight = options.lineHeight || 12
   pdf.setFont('helvetica', options.bold ? 'bold' : 'normal')
   pdf.setFontSize(options.fontSize || 9.5)
@@ -156,7 +156,7 @@ function drawParagraphs (pdf, text, x, y, width, pageWidth, pageHeight, logoData
   const paragraphs = text.split(/<br\s*\/?>/gi).map(p => p.trim()).filter(Boolean)
   paragraphs.forEach(paragraph => {
     const lines = pdf.splitTextToSize(paragraph, width)
-    cursorY = ensureSpace(pdf, cursorY, lines.length * lineHeight, pageWidth, pageHeight, logoDataUrl)
+    cursorY = ensureSpace(pdf, cursorY, lines.length * lineHeight, pageWidth, pageHeight, logoDataUrl, participantName)
     pdf.text(lines, x, cursorY)
     cursorY += lines.length * lineHeight + 6
   })
@@ -173,7 +173,7 @@ function drawSectionHeading (pdf, text, x, y, color) {
   return y + 22
 }
 
-export default async function generatePdfReport ({ resume, viewLanguage }) {
+export default async function generatePdfReport ({ resume, viewLanguage, participantName }) {
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
@@ -218,20 +218,27 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
   pdf.setDrawColor(...hexToRgb(RED))
   pdf.setLineWidth(2)
   pdf.line(pageWidth / 2 - 30, 306, pageWidth / 2 + 30, 306)
+  if (participantName) {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(13)
+    pdf.setTextColor(255, 255, 255)
+    pdf.text(`Ergebnis für ${participantName}`, pageWidth / 2, 332, { align: 'center' })
+    pdf.setFont('helvetica', 'normal')
+  }
   pdf.setFontSize(10)
   pdf.setTextColor(220, 222, 230)
-  pdf.text(`Erstellt am ${dateStr}`, pageWidth / 2, 334, { align: 'center' })
+  pdf.text(`Erstellt am ${dateStr}`, pageWidth / 2, participantName ? 356 : 334, { align: 'center' })
   pdf.setFontSize(9)
   pdf.setTextColor(...hexToRgb(MUTED))
   pdf.text('rd-sim.de', pageWidth / 2, pageHeight - 48, { align: 'center' })
 
   // --- Overview page ---
-  let y = newPage(pdf, pageWidth, logoDataUrl)
+  let y = newPage(pdf, pageWidth, logoDataUrl, participantName)
   y = drawSectionHeading(pdf, 'Übersicht', PAGE_MARGIN, y, RED)
 
   const overviewItems = resume.map((domain, index) => ({ label: domain.title, value: domain.score }))
   const chartHeight = 170
-  y = ensureSpace(pdf, y, chartHeight + 40, pageWidth, pageHeight, logoDataUrl)
+  y = ensureSpace(pdf, y, chartHeight + 40, pageWidth, pageHeight, logoDataUrl, participantName)
   drawBarChart(pdf, {
     x: PAGE_MARGIN + 20,
     y,
@@ -244,7 +251,7 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
   y += chartHeight + 40
 
   // table of domain scores
-  y = ensureSpace(pdf, y, 20, pageWidth, pageHeight, logoDataUrl)
+  y = ensureSpace(pdf, y, 20, pageWidth, pageHeight, logoDataUrl, participantName)
   const colDomain = PAGE_MARGIN
   const colScore = PAGE_MARGIN + contentWidth * 0.55
   const colLevel = PAGE_MARGIN + contentWidth * 0.75
@@ -259,7 +266,7 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
   pdf.line(PAGE_MARGIN, y, pageWidth - PAGE_MARGIN, y)
   y += 14
   resume.forEach((domain, index) => {
-    y = ensureSpace(pdf, y, 20, pageWidth, pageHeight, logoDataUrl)
+    y = ensureSpace(pdf, y, 20, pageWidth, pageHeight, logoDataUrl, participantName)
     pdf.setFillColor(...hexToRgb(DOMAIN_COLORS[index % DOMAIN_COLORS.length]))
     pdf.rect(colDomain, y - 9, 8, 8, 'F')
     pdf.setFont('helvetica', 'normal')
@@ -274,7 +281,7 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
   // --- Domain detail pages ---
   resume.forEach((domain, index) => {
     const color = DOMAIN_COLORS[index % DOMAIN_COLORS.length]
-    y = newPage(pdf, pageWidth, logoDataUrl)
+    y = newPage(pdf, pageWidth, logoDataUrl, participantName)
     y = drawSectionHeading(pdf, domain.title, PAGE_MARGIN, y, color)
 
     pdf.setFont('helvetica', 'italic')
@@ -290,16 +297,16 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
     pdf.text(`Score: ${domain.score} / 120 – ${domain.scoreText}`, PAGE_MARGIN, y)
     y += 18
 
-    y = drawParagraphs(pdf, domain.text, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, { bold: true })
-    y = drawParagraphs(pdf, domain.description, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl)
+    y = drawParagraphs(pdf, domain.text, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, { bold: true })
+    y = drawParagraphs(pdf, domain.description, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName)
 
     if (domain.facets && domain.facets.length) {
       y += 6
-      y = ensureSpace(pdf, y, 40, pageWidth, pageHeight, logoDataUrl)
+      y = ensureSpace(pdf, y, 40, pageWidth, pageHeight, logoDataUrl, participantName)
       y = drawSectionHeading(pdf, `Facetten – ${domain.title}`, PAGE_MARGIN, y, color)
 
       const facetChartHeight = 130
-      y = ensureSpace(pdf, y, facetChartHeight + 36, pageWidth, pageHeight, logoDataUrl)
+      y = ensureSpace(pdf, y, facetChartHeight + 36, pageWidth, pageHeight, logoDataUrl, participantName)
       drawBarChart(pdf, {
         x: PAGE_MARGIN + 20,
         y,
@@ -312,7 +319,7 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
       y += facetChartHeight + 36
 
       domain.facets.forEach(facet => {
-        y = ensureSpace(pdf, y, 30, pageWidth, pageHeight, logoDataUrl)
+        y = ensureSpace(pdf, y, 30, pageWidth, pageHeight, logoDataUrl, participantName)
         pdf.setFillColor(...hexToRgb(color))
         pdf.rect(PAGE_MARGIN, y - 9, Math.max((facet.score / 20) * 60, 2), 6, 'F')
         pdf.setDrawColor(...hexToRgb(BORDER))
@@ -322,7 +329,7 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
         pdf.setTextColor(...hexToRgb(TEXT))
         pdf.text(`${facet.title} (${facet.score}/20 – ${facet.scoreText})`, PAGE_MARGIN + 70, y - 2)
         y += 12
-        y = drawParagraphs(pdf, facet.text, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, { fontSize: 8.8, color: MUTED, lineHeight: 11 })
+        y = drawParagraphs(pdf, facet.text, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, { fontSize: 8.8, color: MUTED, lineHeight: 11 })
         y += 4
       })
     }
@@ -342,5 +349,8 @@ export default async function generatePdfReport ({ resume, viewLanguage }) {
     pdf.text(`Seite ${i - 1} von ${totalPages - 1}`, pageWidth - PAGE_MARGIN, pageHeight - 20, { align: 'right' })
   }
 
-  pdf.save('big-five-ergebnis.pdf')
+  const fileSlug = participantName
+    ? participantName.trim().toLowerCase().replace(/[^a-z0-9äöüß]+/gi, '-').replace(/^-+|-+$/g, '')
+    : ''
+  pdf.save(fileSlug ? `big-five-ergebnis-${fileSlug}.pdf` : 'big-five-ergebnis.pdf')
 }

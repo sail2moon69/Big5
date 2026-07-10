@@ -18,6 +18,11 @@ const Navbar = () => (
     </ul>
     <ul className='right'>
       <li>
+        <Link href='/invite'>
+          <a>Einladung</a>
+        </Link>
+      </li>
+      <li>
         <Link href='/result'>
           <a>Result</a>
         </Link>
