@@ -77,9 +77,23 @@ function buildEmailHtml (name, link) {
       <td align="center">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;max-width:600px;width:100%;">
           <tr>
-            <td style="background-color:#0a0e1a;padding:24px 32px;text-align:center;">
-              <img src="https://big5.rd-sim.de/static/rdsim-favicon.png" width="40" height="40" alt="rd-sim.de" style="display:block;margin:0 auto 8px;border:0;" />
-              <span style="color:#ffffff;font-size:18px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;">Big Five Test</span>
+            <td style="padding:0;line-height:0;">
+              <img src="https://big5.rd-sim.de/static/hero.jpg" width="600" height="150" alt="" style="display:block;width:100%;height:150px;object-fit:cover;border:0;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#0a0e1a;padding:20px 32px 22px;text-align:center;">
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                <tr>
+                  <td style="vertical-align:middle;padding-right:10px;">
+                    <img src="https://big5.rd-sim.de/static/rdsim-favicon.png" width="30" height="30" alt="" style="display:block;border:0;" />
+                  </td>
+                  <td style="vertical-align:middle;">
+                    <span style="color:#ffffff;font-size:24px;font-weight:bold;letter-spacing:1px;">RD-SIM<span style="color:#e63946;">.DE</span></span>
+                  </td>
+                </tr>
+              </table>
+              <div style="color:#f4a01c;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-top:8px;">Big Five Test · Persönliche Einladung</div>
             </td>
           </tr>
           <tr>
