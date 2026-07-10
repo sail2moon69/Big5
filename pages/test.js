@@ -11,6 +11,7 @@ const Test = props => {
   const [nowShowing, setNowShowing] = useState(false)
   const [selectedLanguage, setSelectedLanguage] = useState('en')
   const [participantName, setParticipantName] = useState(false)
+  const [participantEmail, setParticipantEmail] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search.replace('?', ''))
@@ -21,8 +22,10 @@ const Test = props => {
         const invite = unpack(inviteCode)
         language = invite.language || language
         setParticipantName(invite.name)
+        setParticipantEmail(invite.email || false)
       } catch (error) {
         setParticipantName(false)
+        setParticipantEmail(false)
       }
     }
     const items = getItems(language, true)
@@ -66,6 +69,9 @@ const Test = props => {
     }
     if (participantName) {
       result.name = participantName
+    }
+    if (participantEmail) {
+      result.email = participantEmail
     }
     const b64 = pack(result)
     window.location = `/result?id=${b64}`

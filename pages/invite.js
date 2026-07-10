@@ -6,7 +6,11 @@ const { getInfo } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
 const { pack } = require('jcb64')
 
 async function buildInvite (name, email, language) {
-  const code = pack({ name, language })
+  const payload = { name, language }
+  if (email) {
+    payload.email = email
+  }
+  const code = pack(payload)
   const link = `${window.location.origin}/test?invite=${code}`
   const QRCode = (await import('qrcode')).default
   const qrDataUrl = await QRCode.toDataURL(link, {
@@ -30,6 +34,7 @@ const Invite = () => {
 
   // single-invite mode
   const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
   const [language, setLanguage] = useState('de')
   const [invite, setInvite] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -51,7 +56,7 @@ const Invite = () => {
       return
     }
     setIsGenerating(true)
-    const result = await buildInvite(trimmedName, false, language)
+    const result = await buildInvite(trimmedName, email.trim() || false, language)
     setInvite(result)
     setIsGenerating(false)
   }
@@ -60,6 +65,7 @@ const Invite = () => {
     event.preventDefault()
     setInvite(false)
     setName('')
+    setEmail('')
     setCopied(false)
   }
 
@@ -154,8 +160,10 @@ const Invite = () => {
           ? (
             <div className='rdsim-card'>
               <p>
-                Erstellen Sie einen persönlichen Test-Link für eine teilnehmende Person. Der Name wird ausschließlich im
-                Link bzw. QR-Code selbst codiert – es gibt keine Speicherung auf einem Server.
+                Erstellen Sie einen persönlichen Test-Link für eine teilnehmende Person. Name und E-Mail-Adresse werden
+                ausschließlich im Link bzw. QR-Code selbst codiert – es gibt keine Speicherung auf einem Server. Die
+                E-Mail-Adresse wird nur genutzt, damit der fertige Ergebnisbericht am Ende direkt an die teilnehmende
+                Person geschickt werden kann.
               </p>
 
               {!invite
@@ -168,6 +176,13 @@ const Invite = () => {
                       value={name}
                       onChange={event => setName(event.target.value)}
                       required
+                    />
+                    <input
+                      className='rdsim-input'
+                      type='email'
+                      placeholder='E-Mail-Adresse (optional, für Bericht-Versand)'
+                      value={email}
+                      onChange={event => setEmail(event.target.value)}
                     />
                     <select className='rdsim-select' value={language} onChange={event => setLanguage(event.target.value)}>
                       {languages.map(lang => (

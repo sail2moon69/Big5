@@ -308,7 +308,7 @@ function drawSectionHeading (pdf, text, x, y, color) {
   return y + 22
 }
 
-export default async function generatePdfReport ({ resume, viewLanguage, participantName }) {
+async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
@@ -538,5 +538,17 @@ export default async function generatePdfReport ({ resume, viewLanguage, partici
   const fileSlug = participantName
     ? participantName.trim().toLowerCase().replace(/[^a-z0-9äöüß]+/gi, '-').replace(/^-+|-+$/g, '')
     : ''
-  pdf.save(fileSlug ? `big-five-ergebnis-${fileSlug}.pdf` : 'big-five-ergebnis.pdf')
+  const filename = fileSlug ? `big-five-ergebnis-${fileSlug}.pdf` : 'big-five-ergebnis.pdf'
+
+  return { pdf, filename }
+}
+
+export default async function generatePdfReport (args) {
+  const { pdf, filename } = await buildPdfDocument(args)
+  pdf.save(filename)
+}
+
+export async function generatePdfReportDataUri (args) {
+  const { pdf, filename } = await buildPdfDocument(args)
+  return { dataUri: pdf.output('datauristring'), filename }
 }

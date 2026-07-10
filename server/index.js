@@ -24,7 +24,7 @@ const transporter = nodemailer.createTransport({
 })
 
 const app = express()
-app.use(express.json({ limit: '256kb' }))
+app.use(express.json({ limit: '20mb' }))
 
 function isValidEmail (value) {
   return typeof value === 'string' && EMAIL_PATTERN.test(value.trim())
@@ -159,6 +159,114 @@ async function sendEmail ({ name, email, link, ccEmail }) {
     html: buildEmailHtml(name, link)
   })
 }
+
+function buildReportEmailText (name) {
+  return [
+    `Hallo ${name},`,
+    '',
+    'im Anhang finden Sie Ihren persönlichen Big Five Ergebnisbericht als PDF.',
+    '',
+    'Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich den Bericht daher am besten aus und bringen Sie ihn zum Kurs mit.',
+    '',
+    'Datenschutz: Dieser Bericht wurde ausschließlich zum Zweck des Versands kurz auf unserem Mailserver verarbeitet - es gibt keine dauerhafte Speicherung Ihrer Antworten oder Ihres Ergebnisses.',
+    '',
+    'Viele Grüße',
+    'rd-sim.de'
+  ].join('\n')
+}
+
+function buildReportEmailHtml (name) {
+  const safeName = escapeHtml(name)
+  return `<!DOCTYPE html>
+<html lang="de">
+<body style="margin:0;padding:0;background-color:#f4f4f6;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f6;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;max-width:600px;width:100%;">
+          <tr>
+            <td style="padding:0;line-height:0;">
+              <img src="https://big5.rd-sim.de/static/hero.jpg" width="600" height="150" alt="" style="display:block;width:100%;height:150px;object-fit:cover;border:0;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#0a0e1a;padding:20px 32px 22px;text-align:center;">
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                <tr>
+                  <td style="vertical-align:middle;padding-right:10px;">
+                    <img src="https://big5.rd-sim.de/static/rdsim-favicon.png" width="30" height="30" alt="" style="display:block;border:0;" />
+                  </td>
+                  <td style="vertical-align:middle;">
+                    <span style="color:#ffffff;font-size:24px;font-weight:bold;letter-spacing:1px;">RD-SIM<span style="color:#e63946;">.DE</span></span>
+                  </td>
+                </tr>
+              </table>
+              <div style="color:#f4a01c;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-top:8px;">Big Five Test · Ihr Ergebnisbericht</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#1a1a1a;">Hallo ${safeName},</p>
+              <p style="margin:0 0 20px;font-size:15px;color:#333333;line-height:1.6;">im Anhang finden Sie Ihren persönlichen <strong>Big Five Ergebnisbericht</strong> als PDF.</p>
+
+              <div style="background-color:#f4f7fb;border-left:4px solid #0a0e1a;padding:14px 18px;margin:0 0 20px;font-size:14px;color:#333333;line-height:1.6;">
+                Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich den Bericht daher am besten aus und bringen Sie ihn zum Kurs mit.
+              </div>
+
+              <div style="background-color:#fff8ec;border-left:4px solid #f4a01c;padding:14px 18px;font-size:13px;color:#333333;line-height:1.6;">
+                <strong style="color:#c97a00;">Datenschutz:</strong> Dieser Bericht wurde ausschließlich zum Zweck des Versands kurz auf unserem Mailserver verarbeitet – es gibt keine dauerhafte Speicherung Ihrer Antworten oder Ihres Ergebnisses.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f4f4f6;padding:16px 32px;text-align:center;font-size:12px;color:#999999;">
+              rd-sim.de
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
+async function sendReportEmail ({ name, email, pdfBase64 }) {
+  const base64Data = pdfBase64.includes(',') ? pdfBase64.split(',').pop() : pdfBase64
+  await transporter.sendMail({
+    from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`,
+    to: `"${name}" <${email}>`,
+    subject: 'Ihr Big Five Ergebnisbericht',
+    text: buildReportEmailText(name),
+    html: buildReportEmailHtml(name),
+    attachments: [{
+      filename: 'big-five-ergebnisbericht.pdf',
+      content: base64Data,
+      encoding: 'base64',
+      contentType: 'application/pdf'
+    }]
+  })
+}
+
+app.post('/send-report', async (req, res) => {
+  if (!isConfigured()) {
+    res.status(500).json({ error: 'Mail service is not configured on the server' })
+    return
+  }
+
+  const { name, email, pdfBase64 } = req.body || {}
+  if (!name || !isValidEmail(email) || !pdfBase64) {
+    res.status(400).json({ error: 'name, email and pdfBase64 are required' })
+    return
+  }
+
+  try {
+    await sendReportEmail({ name, email: email.trim(), pdfBase64 })
+    res.json({ status: 'sent' })
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
 
 app.post('/send-invites', async (req, res) => {
   if (!isConfigured()) {
