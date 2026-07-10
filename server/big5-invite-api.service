@@ -1,0 +1,14 @@
+[Unit]
+Description=Big Five invite email API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/big5.rd-sim.de/invite-api
+ExecStart=/usr/bin/node index.js
+EnvironmentFile=/var/www/big5.rd-sim.de/invite-api/.env
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

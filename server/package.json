@@ -1,0 +1,16 @@
+{
+  "name": "big5-invite-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Small backend service that sends Big Five invite emails via Brevo. Deployed separately from the static frontend.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

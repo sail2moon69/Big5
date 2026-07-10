@@ -45,3 +45,17 @@ jobs:
           chmod 644 /tmp/invite.htpasswd
           ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p /var/www/big5.rd-sim.de/secrets"
           rsync -avz /tmp/invite.htpasswd "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/secrets/invite.htpasswd"
+
+      - name: Deploy invite-api backend service
+        run: |
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p /var/www/big5.rd-sim.de/invite-api"
+          rsync -avz --delete --exclude node_modules server/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/invite-api/"
+          {
+            echo "PORT=4001"
+            printf 'BREVO_API_KEY=%s\n' '${{ secrets.BREVO_API_KEY }}'
+            printf 'MAIL_FROM_ADDRESS=%s\n' '${{ secrets.MAIL_FROM_ADDRESS }}'
+            echo "MAIL_FROM_NAME=Big Five Test | rd-sim.de"
+          } > /tmp/invite-api.env
+          chmod 600 /tmp/invite-api.env
+          rsync -avz /tmp/invite-api.env "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/invite-api/.env"
+          ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "export XDG_RUNTIME_DIR=/run/user/\$(id -u) && cd /var/www/big5.rd-sim.de/invite-api && npm ci --omit=dev && systemctl --user restart big5-invite-api"
