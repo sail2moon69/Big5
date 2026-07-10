@@ -1,5 +1,6 @@
 import Head from 'next/head'
 import Page from '../components/Page'
+import Hero from '../components/Hero'
 import Intro from '../components/Intro'
 
 const Index = props => {
@@ -9,8 +10,7 @@ const Index = props => {
         <title>Big five webapp</title>
       </Head>
       <Page>
-        <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
-        <h1 className='rdsim-title'>Big Five<span className='dot'>.</span></h1>
+        <Hero eyebrow='Persönlichkeitstest' title='Big Five' slogan='Kenne dich selbst. Führe mit Klarheit.' />
         <Intro />
       </Page>
     </>
