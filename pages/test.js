@@ -9,14 +9,14 @@ const Test = props => {
   const [answers, setAnswers] = useState({})
   const [items, setItems] = useState(false)
   const [nowShowing, setNowShowing] = useState(false)
-  const [selectedLanguage, setSelectedLanguage] = useState('en')
+  const [selectedLanguage, setSelectedLanguage] = useState('de')
   const [participantName, setParticipantName] = useState(false)
   const [participantEmail, setParticipantEmail] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search.replace('?', ''))
     const inviteCode = params.get('invite')
-    let language = params.get('language') || 'en'
+    let language = params.get('language') || 'de'
     if (inviteCode) {
       try {
         const invite = unpack(inviteCode)
@@ -80,14 +80,14 @@ const Test = props => {
   return (
     <>
       <Head>
-        <title>Big five webapp</title>
+        <title>Big Five Persönlichkeitstest</title>
       </Head>
       <Page>
         <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
         <h1 className='rdsim-title'>Big Five<span className='dot'>.</span></h1>
         {participantName ? <p className='greeting'>Hallo, <strong>{participantName}</strong>!</p> : null}
         {items !== false && nowShowing === items.length
-          ? <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit}>Submit</button>
+          ? <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit}>Absenden</button>
           : null}
         {items !== false
           ? items.map(item => parseInt(item.num, 10) <= nowShowing + 1 ? <Item data={item} answers={answers} setAnswer={setAnswer} key={item.id} /> : null)

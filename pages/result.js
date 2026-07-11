@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import Head from 'next/head'
 import Page from '../components/Page'
 import Resume from '../components/Resume'
 import AddResults from '../components/AddResults'
@@ -192,60 +193,65 @@ export default class Result extends Component {
 
   render () {
     return (
-      <Page>
-        <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
-        <h1 className='rdsim-title'>Ergebnis<span className='dot'>.</span></h1>
-        {this.state.results && this.state.results.name ? <p className='greeting'>für <strong>{this.state.results.name}</strong></p> : null}
-        {getInfo().languages.map((lang, index) => <button data-language={lang.id} onClick={this.handleTranslateResume} className={`rdsim-btn rdsim-btn-secondary${lang.id === this.state.viewLanguage ? ' isActive' : ''}`} key={index}>{lang.text}</button>)}
-        {this.state.resume === false ? <AddResults addResults={this.addResults} /> : null}
-        {this.state.resume === false ? <LoadFile handler={this.loadResults} buttonTitle='Upload' /> : null}
-        {this.state.resume !== false
-          ? <Resume data={this.state.resume} width={this.state.chartWidth} />
-          : null}
-        {this.state.resume !== false ? <button className='rdsim-btn rdsim-btn-secondary' onClick={this.handleSaveResults}>Save results</button> : null}
-        {this.state.resume !== false
-          ? <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleDownloadPdf} disabled={this.state.isGeneratingPdf}>{this.state.isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}</button>
-          : null}
-        {this.state.resume !== false
-          ? (
-            <div className='send-report'>
-              <input
-                className='rdsim-input'
-                type='email'
-                placeholder='Ihre E-Mail-Adresse'
-                value={this.state.recipientEmail}
-                onChange={event => this.setState({ recipientEmail: event.target.value })}
-              />
-              <button className='rdsim-btn rdsim-btn-secondary' onClick={this.handleSendReport} disabled={this.state.isSendingReport}>
-                {this.state.isSendingReport ? 'Sende…' : 'Bericht per E-Mail senden'}
-              </button>
-              {this.state.sendReportStatus && this.state.sendReportStatus.ok ? <p className='send-status ok'>Bericht wurde per E-Mail versendet.</p> : null}
-              {this.state.sendReportStatus && this.state.sendReportStatus.error ? <p className='send-status error'>{this.state.sendReportStatus.error}</p> : null}
-            </div>
-            )
-          : null}
-        <style jsx>
-          {`
-            .greeting {
-              text-align: center;
-              color: var(--rdsim-text);
-              margin-bottom: 10px;
-            }
-            .send-report {
-              margin-top: 14px;
-            }
-            .send-status {
-              margin-top: 8px;
-            }
-            .send-status.ok {
-              color: var(--rdsim-text);
-            }
-            .send-status.error {
-              color: var(--rdsim-red);
-            }
-          `}
-        </style>
-      </Page>
+      <>
+        <Head>
+          <title>Ergebnis | Big Five Persönlichkeitstest</title>
+        </Head>
+        <Page>
+          <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
+          <h1 className='rdsim-title'>Ergebnis<span className='dot'>.</span></h1>
+          {this.state.results && this.state.results.name ? <p className='greeting'>für <strong>{this.state.results.name}</strong></p> : null}
+          {getInfo().languages.map((lang, index) => <button data-language={lang.id} onClick={this.handleTranslateResume} className={`rdsim-btn rdsim-btn-secondary${lang.id === this.state.viewLanguage ? ' isActive' : ''}`} key={index}>{lang.text}</button>)}
+          {this.state.resume === false ? <AddResults addResults={this.addResults} /> : null}
+          {this.state.resume === false ? <LoadFile handler={this.loadResults} buttonTitle='Hochladen' /> : null}
+          {this.state.resume !== false
+            ? <Resume data={this.state.resume} width={this.state.chartWidth} />
+            : null}
+          {this.state.resume !== false ? <button className='rdsim-btn rdsim-btn-secondary' onClick={this.handleSaveResults}>Ergebnisse speichern</button> : null}
+          {this.state.resume !== false
+            ? <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleDownloadPdf} disabled={this.state.isGeneratingPdf}>{this.state.isGeneratingPdf ? 'PDF wird erstellt…' : 'PDF herunterladen'}</button>
+            : null}
+          {this.state.resume !== false
+            ? (
+              <div className='send-report'>
+                <input
+                  className='rdsim-input'
+                  type='email'
+                  placeholder='E-Mail-Adresse des Empfängers'
+                  value={this.state.recipientEmail}
+                  onChange={event => this.setState({ recipientEmail: event.target.value })}
+                />
+                <button className='rdsim-btn rdsim-btn-secondary' onClick={this.handleSendReport} disabled={this.state.isSendingReport}>
+                  {this.state.isSendingReport ? 'Sende…' : 'Bericht per E-Mail senden'}
+                </button>
+                {this.state.sendReportStatus && this.state.sendReportStatus.ok ? <p className='send-status ok'>Bericht wurde per E-Mail versendet.</p> : null}
+                {this.state.sendReportStatus && this.state.sendReportStatus.error ? <p className='send-status error'>{this.state.sendReportStatus.error}</p> : null}
+              </div>
+              )
+            : null}
+          <style jsx>
+            {`
+              .greeting {
+                text-align: center;
+                color: var(--rdsim-text);
+                margin-bottom: 10px;
+              }
+              .send-report {
+                margin-top: 14px;
+              }
+              .send-status {
+                margin-top: 8px;
+              }
+              .send-status.ok {
+                color: var(--rdsim-text);
+              }
+              .send-status.error {
+                color: var(--rdsim-red);
+              }
+            `}
+          </style>
+        </Page>
+      </>
     )
   }
 }
