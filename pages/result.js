@@ -5,11 +5,18 @@ import Resume from '../components/Resume'
 import AddResults from '../components/AddResults'
 import LoadFile from '../components/LoadFile'
 import generatePdfReport, { generatePdfReportDataUri } from '../components/pdf-report'
+import { getLeadershipNote } from '../components/result-leadership-notes'
 const { unpack } = require('jcb64')
 const calculateScore = require('@alheimsins/bigfive-calculate-score')
 const getResult = require('@alheimsins/b5-result-text')
 const { getInfo } = require('@alheimsins/b5-result-text')
 const FileSaver = require('file-saver')
+
+function decorateResume (resume, language) {
+  return resume.map(domain => Object.assign({}, domain, {
+    leadershipNote: getLeadershipNote(domain.domain, domain.scoreText, language)
+  }))
+}
 
 export default class Result extends Component {
   constructor (props) {
@@ -48,7 +55,7 @@ export default class Result extends Component {
       if (info.languages.map(lang => lang.id).includes(results.language)) {
         language = results.language
       }
-      const resume = getResult({ scores: scores, lang: language })
+      const resume = decorateResume(getResult({ scores: scores, lang: language }), language)
       this.setState({
         b64: b64,
         scores: scores,
@@ -86,7 +93,7 @@ export default class Result extends Component {
     if (info.languages.map(lang => lang.id).includes(results.language)) {
       language = results.language
     }
-    const resume = getResult({ scores: scores, lang: language })
+    const resume = decorateResume(getResult({ scores: scores, lang: language }), language)
     this.setState({
       b64: b64,
       scores: scores,
@@ -112,7 +119,7 @@ export default class Result extends Component {
       if (info.languages.map(lang => lang.id).includes(results.language)) {
         language = results.language
       }
-      const resume = getResult({ scores: scores, lang: language })
+      const resume = decorateResume(getResult({ scores: scores, lang: language }), language)
       this.setState({
         scores: scores,
         resume: resume,
@@ -184,7 +191,7 @@ export default class Result extends Component {
     e.preventDefault()
     const language = e.target.dataset.language
     const scores = this.state.scores
-    const resume = getResult({ scores: scores, lang: language })
+    const resume = decorateResume(getResult({ scores: scores, lang: language }), language)
     this.setState({
       resume: resume,
       viewLanguage: language

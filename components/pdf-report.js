@@ -468,6 +468,27 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
     y = drawParagraphs(pdf, domain.text, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, { bold: true })
     y = drawParagraphs(pdf, domain.description, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName)
 
+    if (domain.leadershipNote) {
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(8.8)
+      const noteLines = pdf.splitTextToSize(domain.leadershipNote, contentWidth - 24)
+      const noteHeight = 26 + noteLines.length * 11.5
+      y = ensureSpace(pdf, y, noteHeight + 10, pageWidth, pageHeight, logoDataUrl, participantName)
+      pdf.setFillColor(255, 248, 236)
+      pdf.rect(PAGE_MARGIN, y, contentWidth, noteHeight, 'F')
+      pdf.setFillColor(...hexToRgb(ORANGE))
+      pdf.rect(PAGE_MARGIN, y, 3, noteHeight, 'F')
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(8)
+      pdf.setTextColor(...hexToRgb(ORANGE))
+      pdf.text('FÜR FÜHRUNG IM RETTUNGSDIENST', PAGE_MARGIN + 12, y + 15)
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(8.8)
+      pdf.setTextColor(...hexToRgb(TEXT))
+      pdf.text(noteLines, PAGE_MARGIN + 12, y + 29)
+      y += noteHeight + 14
+    }
+
     if (domain.facets && domain.facets.length) {
       y += 6
       y = ensureSpace(pdf, y, 40, pageWidth, pageHeight, logoDataUrl, participantName)
