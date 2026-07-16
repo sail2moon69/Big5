@@ -5,10 +5,14 @@ import generateInvitePdf from '../components/invite-pdf'
 const { getInfo } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
 const { pack } = require('jcb64')
 
-async function buildInvite (name, email, language) {
+async function buildInvite (name, email, language, sealed, trainerEmail) {
   const payload = { name, language }
   if (email) {
     payload.email = email
+  }
+  if (sealed && trainerEmail) {
+    payload.sealed = true
+    payload.trainerEmail = trainerEmail
   }
   const code = pack(payload)
   const link = `${window.location.origin}/test?invite=${code}`
@@ -44,6 +48,7 @@ const Invite = () => {
   const [bulkText, setBulkText] = useState('')
   const [groupLanguage, setGroupLanguage] = useState('de')
   const [ccEmail, setCcEmail] = useState('')
+  const [sealed, setSealed] = useState(false)
   const [groupInvites, setGroupInvites] = useState(false)
   const [isGeneratingGroup, setIsGeneratingGroup] = useState(false)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
@@ -80,6 +85,11 @@ const Invite = () => {
     if (isGeneratingGroup) {
       return
     }
+    const trimmedCcEmail = ccEmail.trim()
+    if (sealed && !trimmedCcEmail) {
+      setSendSummary({ error: 'Bei vertraulichen Ergebnissen ist die E-Mail-Adresse der Lehrgangsleitung ein Pflichtfeld.' })
+      return
+    }
     const entries = bulkText
       .split('\n')
       .map(parseBulkLine)
@@ -92,7 +102,7 @@ const Invite = () => {
     setSendSummary(false)
     const results = []
     for (const entry of entries) {
-      results.push(await buildInvite(entry.name, entry.email, groupLanguage))
+      results.push(await buildInvite(entry.name, entry.email, groupLanguage, sealed, trimmedCcEmail))
     }
     setGroupInvites(results)
     setIsGeneratingGroup(false)
@@ -103,6 +113,7 @@ const Invite = () => {
     setGroupInvites(false)
     setBulkText('')
     setSendSummary(false)
+    setSealed(false)
   }
 
   const downloadGroupPdf = async event => {
@@ -246,10 +257,20 @@ const Invite = () => {
                     <input
                       className='rdsim-input'
                       type='email'
-                      placeholder='Ihre E-Mail (für Kopie/CC, optional)'
+                      placeholder={sealed ? 'E-Mail der Lehrgangsleitung (Pflichtfeld)' : 'Ihre E-Mail (für Kopie/CC, optional)'}
                       value={ccEmail}
                       onChange={event => setCcEmail(event.target.value)}
+                      required={sealed}
                     />
+                    <label className='sealed-toggle'>
+                      <input
+                        type='checkbox'
+                        checked={sealed}
+                        onChange={event => setSealed(event.target.checked)}
+                      />
+                      Ergebnisse vertraulich behandeln – Teilnehmende sehen ihr Ergebnis weder im Web noch per E-Mail,
+                      es geht ausschließlich versiegelt an die oben angegebene Lehrgangsleitung.
+                    </label>
                     <div>
                       <button className='rdsim-btn rdsim-btn-primary' type='submit' disabled={isGeneratingGroup}>
                         {isGeneratingGroup ? 'Erstelle…' : 'Einladungen erstellen'}
@@ -259,6 +280,14 @@ const Invite = () => {
                   )
                 : (
                   <div>
+                    {sealed
+                      ? (
+                        <p className='sealed-note'>
+                          Vertraulich: Diese Gruppe erhält ihr Ergebnis nicht selbst – es geht versiegelt an die
+                          Lehrgangsleitung ({ccEmail.trim()}).
+                        </p>
+                        )
+                      : null}
                     <table className='invite-table'>
                       <thead>
                         <tr>
@@ -341,6 +370,25 @@ const Invite = () => {
             }
             .error-text {
               color: var(--rdsim-red);
+            }
+            .sealed-toggle {
+              display: block;
+              margin-top: 10px;
+              font-size: 13px;
+              color: var(--rdsim-muted);
+              line-height: 1.5;
+            }
+            .sealed-toggle input {
+              margin-right: 8px;
+            }
+            .sealed-note {
+              background: rgba(244, 160, 28, 0.08);
+              border: 1px solid rgba(244, 160, 28, 0.35);
+              border-left: 4px solid var(--rdsim-orange);
+              padding: 10px 14px;
+              margin: 10px 0;
+              color: var(--rdsim-text);
+              font-size: 13px;
             }
           `}
         </style>

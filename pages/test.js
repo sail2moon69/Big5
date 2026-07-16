@@ -12,6 +12,8 @@ const Test = props => {
   const [selectedLanguage, setSelectedLanguage] = useState('de')
   const [participantName, setParticipantName] = useState(false)
   const [participantEmail, setParticipantEmail] = useState(false)
+  const [participantSealed, setParticipantSealed] = useState(false)
+  const [trainerEmail, setTrainerEmail] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search.replace('?', ''))
@@ -23,9 +25,13 @@ const Test = props => {
         language = invite.language || language
         setParticipantName(invite.name)
         setParticipantEmail(invite.email || false)
+        setParticipantSealed(Boolean(invite.sealed && invite.trainerEmail))
+        setTrainerEmail(invite.trainerEmail || false)
       } catch (error) {
         setParticipantName(false)
         setParticipantEmail(false)
+        setParticipantSealed(false)
+        setTrainerEmail(false)
       }
     }
     const items = getItems(language, true)
@@ -72,6 +78,10 @@ const Test = props => {
     }
     if (participantEmail) {
       result.email = participantEmail
+    }
+    if (participantSealed) {
+      result.sealed = true
+      result.trainerEmail = trainerEmail
     }
     const b64 = pack(result)
     window.location = `/result?id=${b64}`

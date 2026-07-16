@@ -32,7 +32,8 @@ export default class Result extends Component {
       isGeneratingPdf: false,
       recipientEmail: '',
       isSendingReport: false,
-      sendReportStatus: false
+      sendReportStatus: false,
+      sealedSendStatus: false
     }
     this.addResults = this.addResults.bind(this)
     this.getWidth = this.getWidth.bind(this)
@@ -41,6 +42,35 @@ export default class Result extends Component {
     this.handleDownloadPdf = this.handleDownloadPdf.bind(this)
     this.handleSendReport = this.handleSendReport.bind(this)
     this.handleTranslateResume = this.handleTranslateResume.bind(this)
+  }
+
+  async maybeSendSealedReport (results, resume, b64, language) {
+    if (!results || !results.sealed || !results.trainerEmail) {
+      return
+    }
+    const sentKey = 'big5-sealed-sent-' + (b64 || '')
+    if (window.localStorage.getItem(sentKey)) {
+      this.setState({ sealedSendStatus: 'sent' })
+      return
+    }
+    this.setState({ sealedSendStatus: 'sending' })
+    try {
+      const participantName = results.name || 'Teilnehmer:in'
+      const { dataUri } = await generatePdfReportDataUri({ resume, viewLanguage: language, participantName: results.name })
+      const response = await window.fetch('/api/send-report', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: participantName, email: results.trainerEmail, pdfBase64: dataUri, sealed: true })
+      })
+      if (response.ok) {
+        window.localStorage.setItem(sentKey, '1')
+        this.setState({ sealedSendStatus: 'sent' })
+      } else {
+        this.setState({ sealedSendStatus: 'error' })
+      }
+    } catch (error) {
+      this.setState({ sealedSendStatus: 'error' })
+    }
   }
 
   async componentDidMount () {
@@ -65,6 +95,7 @@ export default class Result extends Component {
         results: results,
         recipientEmail: results.email || ''
       })
+      this.maybeSendSealedReport(results, resume, b64, language)
     }
     document.addEventListener('DOMContentLoaded', this.getWidth(), false)
     window.addEventListener('resize', this.getWidth.bind(this))
@@ -103,6 +134,7 @@ export default class Result extends Component {
       results: results,
       recipientEmail: results.email || ''
     })
+    this.maybeSendSealedReport(results, resume, b64, language)
     compressedDataField.value = ''
   }
 
@@ -128,6 +160,7 @@ export default class Result extends Component {
         results: results,
         recipientEmail: results.email || ''
       })
+      this.maybeSendSealedReport(results, resume, false, language)
     }
     if (files.length === 1) {
       reader.readAsText(files[0])
@@ -199,6 +232,37 @@ export default class Result extends Component {
   }
 
   render () {
+    if (this.state.results && this.state.results.sealed) {
+      return (
+        <>
+          <Head>
+            <title>Vielen Dank | Big Five Persönlichkeitstest</title>
+          </Head>
+          <Page>
+            <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
+            <h1 className='rdsim-title'>Vielen Dank<span className='dot'>.</span></h1>
+            <p className='sealed-message'>Sie erhalten Ihr Ergebnis in einem versiegelten Umschlag beim Lehrgang.</p>
+            {this.state.sealedSendStatus === 'error'
+              ? <p className='send-status error'>Beim Versand ist ein technisches Problem aufgetreten. Bitte wenden Sie sich an Ihre Lehrgangsleitung.</p>
+              : null}
+            <style jsx>
+              {`
+                .sealed-message {
+                  text-align: center;
+                  color: var(--rdsim-text);
+                  margin: 20px auto;
+                  max-width: 480px;
+                }
+                .send-status.error {
+                  text-align: center;
+                  color: var(--rdsim-red);
+                }
+              `}
+            </style>
+          </Page>
+        </>
+      )
+    }
     return (
       <>
         <Head>

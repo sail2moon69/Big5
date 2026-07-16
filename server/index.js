@@ -175,6 +175,66 @@ function buildReportEmailText (name) {
   ].join('\n')
 }
 
+function buildSealedReportEmailText (participantName) {
+  return [
+    `Ergebnisbericht: ${participantName}`,
+    '',
+    `Im Anhang finden Sie den vertraulichen Big Five Ergebnisbericht von ${participantName}.`,
+    '',
+    'Diese Einladung war als vertraulich markiert: Das Ergebnis wurde der teilnehmenden Person weder im Web angezeigt noch per E-Mail zugestellt, sondern ausschließlich an Sie als Lehrgangsleitung gesendet.',
+    '',
+    'Viele Grüße',
+    'rd-sim.de'
+  ].join('\n')
+}
+
+function buildSealedReportEmailHtml (participantName) {
+  const safeName = escapeHtml(participantName)
+  return `<!DOCTYPE html>
+<html lang="de">
+<body style="margin:0;padding:0;background-color:#f4f4f6;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f6;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;max-width:600px;width:100%;">
+          <tr>
+            <td style="background-color:#0a0e1a;padding:20px 32px 22px;text-align:center;">
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                <tr>
+                  <td style="vertical-align:middle;padding-right:10px;">
+                    <img src="https://big5.rd-sim.de/static/rdsim-favicon.png" width="30" height="30" alt="" style="display:block;border:0;" />
+                  </td>
+                  <td style="vertical-align:middle;">
+                    <span style="color:#ffffff;font-size:24px;font-weight:bold;letter-spacing:1px;">RD-SIM<span style="color:#e63946;">.DE</span></span>
+                  </td>
+                </tr>
+              </table>
+              <div style="color:#f4a01c;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-top:8px;">Big Five Test · Vertraulicher Ergebnisbericht</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#1a1a1a;">Ergebnisbericht: <strong>${safeName}</strong></p>
+              <p style="margin:0 0 20px;font-size:15px;color:#333333;line-height:1.6;">Im Anhang finden Sie den vertraulichen Big Five Ergebnisbericht von ${safeName}.</p>
+
+              <div style="background-color:#fff8ec;border-left:4px solid #f4a01c;padding:14px 18px;font-size:13px;color:#333333;line-height:1.6;">
+                <strong style="color:#c97a00;">Vertraulich:</strong> Diese Einladung war als vertraulich markiert. Das Ergebnis wurde der teilnehmenden Person weder im Web angezeigt noch per E-Mail zugestellt, sondern ausschließlich an Sie als Lehrgangsleitung gesendet.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#f4f4f6;padding:16px 32px;text-align:center;font-size:12px;color:#999999;">
+              rd-sim.de
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+}
+
 function buildReportEmailHtml (name) {
   const safeName = escapeHtml(name)
   return `<!DOCTYPE html>
@@ -231,14 +291,14 @@ function buildReportEmailHtml (name) {
 </html>`
 }
 
-async function sendReportEmail ({ name, email, pdfBase64 }) {
+async function sendReportEmail ({ name, email, pdfBase64, sealed }) {
   const base64Data = pdfBase64.includes(',') ? pdfBase64.split(',').pop() : pdfBase64
   await transporter.sendMail({
     from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`,
-    to: `"${name}" <${email}>`,
-    subject: 'Ihr Big Five Ergebnisbericht',
-    text: buildReportEmailText(name),
-    html: buildReportEmailHtml(name),
+    to: sealed ? email : `"${name}" <${email}>`,
+    subject: sealed ? `Vertraulicher Ergebnisbericht: ${name}` : 'Ihr Big Five Ergebnisbericht',
+    text: sealed ? buildSealedReportEmailText(name) : buildReportEmailText(name),
+    html: sealed ? buildSealedReportEmailHtml(name) : buildReportEmailHtml(name),
     attachments: [{
       filename: 'big-five-ergebnisbericht.pdf',
       content: base64Data,
@@ -254,14 +314,14 @@ app.post('/send-report', async (req, res) => {
     return
   }
 
-  const { name, email, pdfBase64 } = req.body || {}
+  const { name, email, pdfBase64, sealed } = req.body || {}
   if (!name || !isValidEmail(email) || !pdfBase64) {
     res.status(400).json({ error: 'name, email and pdfBase64 are required' })
     return
   }
 
   try {
-    await sendReportEmail({ name, email: email.trim(), pdfBase64 })
+    await sendReportEmail({ name, email: email.trim(), pdfBase64, sealed: Boolean(sealed) })
     res.json({ status: 'sent' })
   } catch (error) {
     res.status(500).json({ error: error.message })
