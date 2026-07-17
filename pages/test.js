@@ -28,6 +28,8 @@ const Test = props => {
   const [participantSealed, setParticipantSealed] = useState(false)
   const [trainerEmail, setTrainerEmail] = useState(false)
   const [storageKey, setStorageKey] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search.replace('?', ''))
@@ -94,39 +96,52 @@ const Test = props => {
   }
 
   const handleSubmit = event => {
-    const choices = Object.keys(answers).reduce((prev, current) => {
-      const choice = answers[current]
-      prev.push({
-        id: choice.id,
-        domain: choice.domain,
-        facet: choice.facet,
-        score: choice.score
-      })
-      return prev
-    }, [])
-    const result = {
-      language: selectedLanguage,
-      answers: choices
+    if (isSubmitting) {
+      return
     }
-    if (participantName) {
-      result.name = participantName
-    }
-    if (participantEmail) {
-      result.email = participantEmail
-    }
-    if (participantSealed) {
-      result.sealed = true
-      result.trainerEmail = trainerEmail
-    }
-    if (storageKey) {
-      try {
-        window.localStorage.removeItem(storageKey)
-      } catch (error) {
-        // ignore - nothing to clean up if storage isn't available
+    setIsSubmitting(true)
+    setSubmitError(false)
+    try {
+      const choices = Object.keys(answers).reduce((prev, current) => {
+        const choice = answers[current]
+        prev.push({
+          id: choice.id,
+          domain: choice.domain,
+          facet: choice.facet,
+          score: choice.score
+        })
+        return prev
+      }, [])
+      const result = {
+        language: selectedLanguage,
+        answers: choices
       }
+      if (participantName) {
+        result.name = participantName
+      }
+      if (participantEmail) {
+        result.email = participantEmail
+      }
+      if (participantSealed) {
+        result.sealed = true
+        result.trainerEmail = trainerEmail
+      }
+      // Pack and confirm the navigation target BEFORE touching saved progress - if anything
+      // above throws, the participant's answers stay safely in localStorage for a retry.
+      const b64 = pack(result)
+      const target = `/result?id=${b64}`
+      if (storageKey) {
+        try {
+          window.localStorage.removeItem(storageKey)
+        } catch (error) {
+          // ignore - nothing to clean up if storage isn't available
+        }
+      }
+      window.location = target
+    } catch (error) {
+      setIsSubmitting(false)
+      setSubmitError('Beim Absenden ist ein Fehler aufgetreten. Ihre Antworten sind gespeichert - bitte versuchen Sie es erneut.')
     }
-    const b64 = pack(result)
-    window.location = `/result?id=${b64}`
   }
 
   return (
@@ -139,7 +154,14 @@ const Test = props => {
         <h1 className='rdsim-title'>Big Five<span className='dot'>.</span></h1>
         {participantName ? <p className='greeting'>Hallo, <strong>{participantName}</strong>!</p> : null}
         {items !== false && nowShowing === items.length
-          ? <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit}>Absenden</button>
+          ? (
+            <div className='submit-wrapper'>
+              <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit} disabled={isSubmitting}>
+                {isSubmitting ? 'Wird gesendet…' : 'Absenden'}
+              </button>
+              {submitError ? <p className='submit-error'>{submitError}</p> : null}
+            </div>
+            )
           : null}
         {items !== false
           ? items.map(item => parseInt(item.num, 10) <= nowShowing + 1 ? <Item data={item} answers={answers} setAnswer={setAnswer} key={item.id} /> : null)
@@ -150,6 +172,14 @@ const Test = props => {
               text-align: center;
               color: var(--rdsim-text);
               margin-bottom: 10px;
+            }
+            .submit-wrapper {
+              text-align: center;
+            }
+            .submit-error {
+              color: var(--rdsim-red);
+              max-width: 480px;
+              margin: 8px auto 0;
             }
           `}
         </style>
