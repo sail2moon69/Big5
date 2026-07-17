@@ -1,11 +1,4 @@
-import { useState } from 'react'
-import { useRouter } from 'next/router'
-const { getInfo } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
-
 const Intro = () => {
-  const router = useRouter()
-  const [language, setLanguage] = useState('de')
-  const { languages } = getInfo()
   return (
     <div className='intro-wrapper rdsim-card'>
       <h2 className='rdsim-subhead'>Über den Test</h2>
@@ -55,19 +48,11 @@ const Intro = () => {
         </p>
       </div>
 
-      <h2 className='rdsim-subhead'>Testsprache wählen</h2>
-      <select
-        className='rdsim-select'
-        value={language}
-        onChange={event => setLanguage(event.target.value)}
-      >
-        <option value='' key='first-option'>Choose language</option>
-        {languages.map(lang => (
-          <option value={lang.id} key={lang.id}>{lang.text}</option>
-        ))}
-      </select>
-      <div>
-        <button className='rdsim-btn rdsim-btn-primary' onClick={() => router.push(`/test?language=${language}`)}>Test starten</button>
+      <div className='rdsim-note'>
+        <p>
+          <strong>Zugang:</strong> Der Test lässt sich nicht direkt über diese Seite starten. Sie erhalten Ihre
+          persönlichen Zugangsdaten (Link bzw. QR-Code) vor oder während eines Lehrgangs von Ihrer Lehrgangsleitung.
+        </p>
       </div>
       <style jsx>
         {`
