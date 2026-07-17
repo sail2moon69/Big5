@@ -25,12 +25,12 @@ const Navbar = () => (
       </li>
       <li>
         <Link href='/result'>
-          <a>Result</a>
+          <a>Ergebnis</a>
         </Link>
       </li>
       <li>
         <Link href='/compare'>
-          <a>Compare</a>
+          <a>Vergleich</a>
         </Link>
       </li>
     </ul>

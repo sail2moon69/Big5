@@ -5,6 +5,19 @@ import Item from '../components/Item'
 const { getItems } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
 const { pack, unpack } = require('jcb64')
 
+function getStorageKey (inviteCode) {
+  return `big5-test-progress-${inviteCode || 'anonymous'}`
+}
+
+function loadSavedProgress (storageKey) {
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    return raw ? JSON.parse(raw) : false
+  } catch (error) {
+    return false
+  }
+}
+
 const Test = props => {
   const [answers, setAnswers] = useState({})
   const [items, setItems] = useState(false)
@@ -14,6 +27,7 @@ const Test = props => {
   const [participantEmail, setParticipantEmail] = useState(false)
   const [participantSealed, setParticipantSealed] = useState(false)
   const [trainerEmail, setTrainerEmail] = useState(false)
+  const [storageKey, setStorageKey] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search.replace('?', ''))
@@ -34,28 +48,49 @@ const Test = props => {
         setTrainerEmail(false)
       }
     }
+    const key = getStorageKey(inviteCode)
+    setStorageKey(key)
     const items = getItems(language, true)
     setSelectedLanguage(language)
     items.reverse()
     setItems(items)
-    setNowShowing(0)
+
+    const saved = loadSavedProgress(key)
+    if (saved && saved.answers && typeof saved.nowShowing === 'number') {
+      setAnswers(saved.answers)
+      setNowShowing(saved.nowShowing)
+    } else {
+      setNowShowing(0)
+    }
   }, [])
+
+  useEffect(() => {
+    if (!storageKey || nowShowing === false) {
+      return
+    }
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify({ answers, nowShowing }))
+    } catch (error) {
+      // localStorage unavailable (e.g. private browsing quota) - progress just won't survive a reload
+    }
+  }, [answers, nowShowing, storageKey])
 
   const setAnswer = event => {
     event.preventDefault()
-    const thisAnswers = answers
     const nextShowing = parseInt(event.target.dataset.num, 10)
     if (nextShowing > nowShowing) {
       setNowShowing(nextShowing)
     }
 
-    thisAnswers[event.target.dataset.qid] = {
-      id: event.target.dataset.qid,
-      domain: event.target.dataset.domain,
-      facet: event.target.dataset.facet,
-      score: event.target.dataset.score
-    }
-    setAnswers(thisAnswers)
+    setAnswers(previousAnswers => ({
+      ...previousAnswers,
+      [event.target.dataset.qid]: {
+        id: event.target.dataset.qid,
+        domain: event.target.dataset.domain,
+        facet: event.target.dataset.facet,
+        score: event.target.dataset.score
+      }
+    }))
   }
 
   const handleSubmit = event => {
@@ -82,6 +117,13 @@ const Test = props => {
     if (participantSealed) {
       result.sealed = true
       result.trainerEmail = trainerEmail
+    }
+    if (storageKey) {
+      try {
+        window.localStorage.removeItem(storageKey)
+      } catch (error) {
+        // ignore - nothing to clean up if storage isn't available
+      }
     }
     const b64 = pack(result)
     window.location = `/result?id=${b64}`

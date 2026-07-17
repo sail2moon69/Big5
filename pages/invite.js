@@ -87,7 +87,7 @@ const Invite = () => {
     }
     const trimmedCcEmail = ccEmail.trim()
     if (sealed && !trimmedCcEmail) {
-      setSendSummary({ error: 'Bei vertraulichen Ergebnissen ist die E-Mail-Adresse der Lehrgangsleitung ein Pflichtfeld.' })
+      setSendSummary({ error: 'Im Lehrgangsmodus ist die E-Mail-Adresse der Lehrgangsleitung ein Pflichtfeld.' })
       return
     }
     const entries = bulkText
@@ -139,7 +139,7 @@ const Invite = () => {
       const response = await window.fetch('/api/send-invites', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ recipients, ccEmail: ccEmail.trim() || undefined })
+        body: JSON.stringify({ recipients, ccEmail: ccEmail.trim() || undefined, lehrgangsmodus: sealed })
       })
       const data = await response.json()
       if (!response.ok) {
@@ -268,8 +268,8 @@ const Invite = () => {
                         checked={sealed}
                         onChange={event => setSealed(event.target.checked)}
                       />
-                      Ergebnisse vertraulich behandeln – Teilnehmende sehen ihr Ergebnis weder im Web noch per E-Mail,
-                      es geht ausschließlich versiegelt an die oben angegebene Lehrgangsleitung.
+                      Lehrgangsmodus aktivieren – Teilnehmende sehen ihr Ergebnis weder im Web noch per E-Mail,
+                      es geht ausschließlich an die oben angegebene Lehrgangsleitung.
                     </label>
                     <div>
                       <button className='rdsim-btn rdsim-btn-primary' type='submit' disabled={isGeneratingGroup}>
@@ -283,7 +283,7 @@ const Invite = () => {
                     {sealed
                       ? (
                         <p className='sealed-note'>
-                          Vertraulich: Diese Gruppe erhält ihr Ergebnis nicht selbst – es geht versiegelt an die
+                          Lehrgangsmodus: Diese Gruppe erhält ihr Ergebnis nicht selbst – es geht an die
                           Lehrgangsleitung ({ccEmail.trim()}).
                         </p>
                         )

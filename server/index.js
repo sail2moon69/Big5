@@ -39,7 +39,16 @@ function escapeHtml (value) {
     .replace(/'/g, '&#39;')
 }
 
-function buildEmailText (name, link) {
+function buildEmailText (name, link, lehrgangsmodus) {
+  const afterTestLines = lehrgangsmodus
+    ? [
+        'Nach dem Test',
+        'Diese Einladung läuft im Lehrgangsmodus: Ihr Ergebnis wird Ihnen nicht direkt angezeigt oder zugesandt. Es geht automatisch an Ihre Lehrgangsleitung und wird im Rahmen des Lehrgangs persönlich mit Ihnen besprochen.'
+      ]
+    : [
+        'Nach dem Test',
+        'Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.'
+      ]
   return [
     `Hallo ${name},`,
     '',
@@ -59,8 +68,7 @@ function buildEmailText (name, link) {
     '- Die erste, spontane Reaktion ist meist die zutreffendste.',
     '- Planen Sie ca. 15-20 Minuten ein und beantworten Sie den Test möglichst am Stück.',
     '',
-    'Nach dem Test',
-    'Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.',
+    ...afterTestLines,
     '',
     'Datenschutz: Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte - niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.',
     '',
@@ -69,9 +77,13 @@ function buildEmailText (name, link) {
   ].join('\n')
 }
 
-function buildEmailHtml (name, link) {
+function buildEmailHtml (name, link, lehrgangsmodus) {
   const safeName = escapeHtml(name)
   const safeLink = escapeHtml(link)
+  const afterTestHeading = 'Nach dem Test'
+  const afterTestText = lehrgangsmodus
+    ? 'Diese Einladung läuft im Lehrgangsmodus: Ihr Ergebnis wird Ihnen nicht direkt angezeigt oder zugesandt. Es geht automatisch an Ihre Lehrgangsleitung und wird im Rahmen des Lehrgangs persönlich mit Ihnen besprochen.'
+    : 'Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.'
   return `<!DOCTYPE html>
 <html lang="de">
 <body style="margin:0;padding:0;background-color:#f4f4f6;font-family:Arial,Helvetica,sans-serif;">
@@ -126,9 +138,9 @@ function buildEmailHtml (name, link) {
                 <li>Planen Sie ca. 15–20 Minuten ein und beantworten Sie den Test möglichst am Stück.</li>
               </ul>
 
-              <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:0.5px;color:#1a1a1a;margin:0 0 8px;">Nach dem Test</h2>
+              <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:0.5px;color:#1a1a1a;margin:0 0 8px;">${afterTestHeading}</h2>
               <div style="background-color:#f4f7fb;border-left:4px solid #0a0e1a;padding:14px 18px;margin:0 0 20px;font-size:14px;color:#333333;line-height:1.6;">
-                Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.
+                ${afterTestText}
               </div>
 
               <div style="background-color:#fff8ec;border-left:4px solid #f4a01c;padding:14px 18px;font-size:13px;color:#333333;line-height:1.6;">
@@ -149,14 +161,14 @@ function buildEmailHtml (name, link) {
 </html>`
 }
 
-async function sendEmail ({ name, email, link, ccEmail }) {
+async function sendEmail ({ name, email, link, ccEmail, lehrgangsmodus }) {
   await transporter.sendMail({
     from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`,
     to: `"${name}" <${email}>`,
     cc: ccEmail || undefined,
     subject: 'Ihre persönliche Einladung zum Big Five Test',
-    text: buildEmailText(name, link),
-    html: buildEmailHtml(name, link)
+    text: buildEmailText(name, link, lehrgangsmodus),
+    html: buildEmailHtml(name, link, lehrgangsmodus)
   })
 }
 
@@ -179,9 +191,9 @@ function buildSealedReportEmailText (participantName) {
   return [
     `Ergebnisbericht: ${participantName}`,
     '',
-    `Im Anhang finden Sie den vertraulichen Big Five Ergebnisbericht von ${participantName}.`,
+    `Im Anhang finden Sie den Big Five Ergebnisbericht von ${participantName}.`,
     '',
-    'Diese Einladung war als vertraulich markiert: Das Ergebnis wurde der teilnehmenden Person weder im Web angezeigt noch per E-Mail zugestellt, sondern ausschließlich an Sie als Lehrgangsleitung gesendet.',
+    'Diese Einladung lief im Lehrgangsmodus: Das Ergebnis wurde der teilnehmenden Person weder im Web angezeigt noch per E-Mail zugestellt, sondern ausschließlich an Sie als Lehrgangsleitung gesendet.',
     '',
     'Viele Grüße',
     'rd-sim.de'
@@ -209,16 +221,16 @@ function buildSealedReportEmailHtml (participantName) {
                   </td>
                 </tr>
               </table>
-              <div style="color:#f4a01c;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-top:8px;">Big Five Test · Vertraulicher Ergebnisbericht</div>
+              <div style="color:#f4a01c;font-size:12px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;margin-top:8px;">Big Five Test · Lehrgangsmodus</div>
             </td>
           </tr>
           <tr>
             <td style="padding:32px;">
               <p style="margin:0 0 16px;font-size:16px;color:#1a1a1a;">Ergebnisbericht: <strong>${safeName}</strong></p>
-              <p style="margin:0 0 20px;font-size:15px;color:#333333;line-height:1.6;">Im Anhang finden Sie den vertraulichen Big Five Ergebnisbericht von ${safeName}.</p>
+              <p style="margin:0 0 20px;font-size:15px;color:#333333;line-height:1.6;">Im Anhang finden Sie den Big Five Ergebnisbericht von ${safeName}.</p>
 
               <div style="background-color:#fff8ec;border-left:4px solid #f4a01c;padding:14px 18px;font-size:13px;color:#333333;line-height:1.6;">
-                <strong style="color:#c97a00;">Vertraulich:</strong> Diese Einladung war als vertraulich markiert. Das Ergebnis wurde der teilnehmenden Person weder im Web angezeigt noch per E-Mail zugestellt, sondern ausschließlich an Sie als Lehrgangsleitung gesendet.
+                <strong style="color:#c97a00;">Lehrgangsmodus:</strong> Diese Einladung lief im Lehrgangsmodus. Das Ergebnis wurde der teilnehmenden Person weder im Web angezeigt noch per E-Mail zugestellt, sondern ausschließlich an Sie als Lehrgangsleitung gesendet.
               </div>
             </td>
           </tr>
@@ -296,7 +308,7 @@ async function sendReportEmail ({ name, email, pdfBase64, sealed }) {
   await transporter.sendMail({
     from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`,
     to: sealed ? email : `"${name}" <${email}>`,
-    subject: sealed ? `Vertraulicher Ergebnisbericht: ${name}` : 'Ihr Big Five Ergebnisbericht',
+    subject: sealed ? `Lehrgangsmodus – Ergebnisbericht: ${name}` : 'Ihr Big Five Ergebnisbericht',
     text: sealed ? buildSealedReportEmailText(name) : buildReportEmailText(name),
     html: sealed ? buildSealedReportEmailHtml(name) : buildReportEmailHtml(name),
     attachments: [{
@@ -334,7 +346,7 @@ app.post('/send-invites', async (req, res) => {
     return
   }
 
-  const { recipients, ccEmail } = req.body || {}
+  const { recipients, ccEmail, lehrgangsmodus } = req.body || {}
   if (!Array.isArray(recipients) || recipients.length === 0) {
     res.status(400).json({ error: 'recipients must be a non-empty array' })
     return
@@ -356,7 +368,7 @@ app.post('/send-invites', async (req, res) => {
       continue
     }
     try {
-      await sendEmail({ name, email: email.trim(), link, ccEmail })
+      await sendEmail({ name, email: email.trim(), link, ccEmail, lehrgangsmodus: Boolean(lehrgangsmodus) })
       results.push({ name, email, status: 'sent' })
     } catch (error) {
       results.push({ name, email, status: 'failed', reason: error.message })
