@@ -337,6 +337,16 @@ function drawBulletList (pdf, items, x, y, width, pageWidth, pageHeight, logoDat
   return cursorY
 }
 
+function measureBulletListHeight (pdf, items, width, options = {}) {
+  const lineHeight = options.lineHeight || 12
+  pdf.setFont('helvetica', options.bold ? 'bold' : 'normal')
+  pdf.setFontSize(options.fontSize || 9.5)
+  return items.reduce((height, item) => {
+    const lines = pdf.splitTextToSize(`–  ${item}`, width)
+    return height + lines.length * lineHeight + 6
+  }, 0)
+}
+
 async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
@@ -545,19 +555,20 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
 
     if (domain.reflectionQuestions && domain.reflectionQuestions.length) {
       y += 4
-      y = ensureSpace(pdf, y, 30, pageWidth, pageHeight, logoDataUrl, participantName)
+      const bulletOptions = { fontSize: 9.5, lineHeight: 12 }
+      const bulletHeight = measureBulletListHeight(pdf, domain.reflectionQuestions, contentWidth, bulletOptions)
+      y = ensureSpace(pdf, y, 30 + bulletHeight, pageWidth, pageHeight, logoDataUrl, participantName)
       y = drawSectionHeading(pdf, 'Reflexionsfragen', PAGE_MARGIN, y, color)
-      y = drawBulletList(pdf, domain.reflectionQuestions, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, { fontSize: 9.5, lineHeight: 12 })
+      y = drawBulletList(pdf, domain.reflectionQuestions, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, bulletOptions)
       y += 6
     }
 
     if (domain.facets && domain.facets.length) {
       y += 6
-      y = ensureSpace(pdf, y, 40, pageWidth, pageHeight, logoDataUrl, participantName)
+      const facetChartHeight = 130
+      y = ensureSpace(pdf, y, 40 + facetChartHeight + 36, pageWidth, pageHeight, logoDataUrl, participantName)
       y = drawSectionHeading(pdf, `Facetten – ${domain.title}`, PAGE_MARGIN, y, color)
 
-      const facetChartHeight = 130
-      y = ensureSpace(pdf, y, facetChartHeight + 36, pageWidth, pageHeight, logoDataUrl, participantName)
       drawBarChart(pdf, {
         x: PAGE_MARGIN + 20,
         y,
