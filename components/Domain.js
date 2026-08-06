@@ -16,6 +16,16 @@ export default ({ data, chartWidth }) => (
         </div>
         )
       : null}
+    {data.reflectionQuestions && data.reflectionQuestions.length
+      ? (
+        <div className='reflection-questions'>
+          <span className='label'>Reflexionsfragen</span>
+          <ul>
+            {data.reflectionQuestions.map((question, index) => <li key={index}>{question}</li>)}
+          </ul>
+        </div>
+        )
+      : null}
     {data && data.facets
       ? <Summary data={data.facets} yDomainRange={[0, 20]} chartWidth={chartWidth} />
       : null}
@@ -44,6 +54,32 @@ export default ({ data, chartWidth }) => (
         .leadership-note p {
           margin: 0;
           color: #444;
+        }
+        .reflection-questions {
+          background: #f7f7f8;
+          border: 1px solid var(--rdsim-border);
+          border-left: 4px solid var(--rdsim-red);
+          padding: 1rem 1.25rem;
+          margin: 1.2rem 0;
+          text-align: left;
+        }
+        .reflection-questions .label {
+          display: block;
+          font-size: 0.75rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: var(--rdsim-red);
+          margin-bottom: 0.4rem;
+        }
+        .reflection-questions ul {
+          list-style-type: disc;
+          padding-left: 1.1rem;
+          margin: 0;
+        }
+        .reflection-questions li {
+          color: #444;
+          margin-bottom: 4px;
         }
       `}
     </style>

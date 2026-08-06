@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import Page from '../components/Page'
 import Item from '../components/Item'
-const { getItems } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
+const { getItems, getInfo } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
 const { pack, unpack } = require('jcb64')
 
 function getStorageKey (inviteCode) {
@@ -21,7 +21,7 @@ function loadSavedProgress (storageKey) {
 const Test = props => {
   const [answers, setAnswers] = useState({})
   const [items, setItems] = useState(false)
-  const [nowShowing, setNowShowing] = useState(false)
+  const [revealedCount, setRevealedCount] = useState(false)
   const [selectedLanguage, setSelectedLanguage] = useState('de')
   const [participantName, setParticipantName] = useState(false)
   const [participantEmail, setParticipantEmail] = useState(false)
@@ -31,13 +31,29 @@ const Test = props => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(false)
 
+  const loadLanguage = (language, key) => {
+    const loadedItems = getItems(language, true)
+    loadedItems.reverse()
+    setSelectedLanguage(language)
+    setItems(loadedItems)
+
+    const saved = loadSavedProgress(key)
+    if (saved && saved.answers && typeof saved.revealedCount === 'number') {
+      setAnswers(saved.answers)
+      setRevealedCount(saved.revealedCount)
+    } else {
+      setAnswers({})
+      setRevealedCount(1)
+    }
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search.replace('?', ''))
-    const inviteCode = params.get('invite')
+    const code = params.get('invite')
     let language = params.get('language') || 'de'
-    if (inviteCode) {
+    if (code) {
       try {
-        const invite = unpack(inviteCode)
+        const invite = unpack(code)
         language = invite.language || language
         setParticipantName(invite.name)
         setParticipantEmail(invite.email || false)
@@ -50,49 +66,44 @@ const Test = props => {
         setTrainerEmail(false)
       }
     }
-    const key = getStorageKey(inviteCode)
+    const key = getStorageKey(code)
     setStorageKey(key)
-    const items = getItems(language, true)
-    setSelectedLanguage(language)
-    items.reverse()
-    setItems(items)
-
-    const saved = loadSavedProgress(key)
-    if (saved && saved.answers && typeof saved.nowShowing === 'number') {
-      setAnswers(saved.answers)
-      setNowShowing(saved.nowShowing)
-    } else {
-      setNowShowing(0)
-    }
+    loadLanguage(language, key)
   }, [])
 
   useEffect(() => {
-    if (!storageKey || nowShowing === false) {
+    if (!storageKey || revealedCount === false) {
       return
     }
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ answers, nowShowing }))
+      window.localStorage.setItem(storageKey, JSON.stringify({ answers, revealedCount }))
     } catch (error) {
       // localStorage unavailable (e.g. private browsing quota) - progress just won't survive a reload
     }
-  }, [answers, nowShowing, storageKey])
+  }, [answers, revealedCount, storageKey])
+
+  const handleLanguageChange = event => {
+    loadLanguage(event.target.value, storageKey)
+  }
 
   const setAnswer = event => {
     event.preventDefault()
-    const nextShowing = parseInt(event.target.dataset.num, 10)
-    if (nextShowing > nowShowing) {
-      setNowShowing(nextShowing)
-    }
+    const qid = event.target.dataset.qid
+    const isFirstAnswer = !(qid in answers)
 
     setAnswers(previousAnswers => ({
       ...previousAnswers,
-      [event.target.dataset.qid]: {
-        id: event.target.dataset.qid,
+      [qid]: {
+        id: qid,
         domain: event.target.dataset.domain,
         facet: event.target.dataset.facet,
         score: event.target.dataset.score
       }
     }))
+
+    if (isFirstAnswer) {
+      setRevealedCount(previousCount => Math.min(previousCount + 1, items.length))
+    }
   }
 
   const handleSubmit = event => {
@@ -144,6 +155,13 @@ const Test = props => {
     }
   }
 
+  const answeredCount = Object.keys(answers).length
+  const totalCount = items !== false ? items.length : 120
+  const progressPercent = totalCount ? Math.round((answeredCount / totalCount) * 100) : 0
+  const visibleItems = items !== false && revealedCount !== false
+    ? items.slice(Math.max(items.length - revealedCount, 0))
+    : []
+
   return (
     <>
       <Head>
@@ -153,7 +171,36 @@ const Test = props => {
         <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
         <h1 className='rdsim-title'>Big Five<span className='dot'>.</span></h1>
         {participantName ? <p className='greeting'>Hallo, <strong>{participantName}</strong>!</p> : null}
-        {items !== false && nowShowing === items.length
+
+        {items !== false
+          ? (
+            <div className='progress-wrapper'>
+              <div className='progress-label'>{answeredCount} von {totalCount} Fragen beantwortet</div>
+              <div className='progress-track'>
+                <div className='progress-fill' style={{ width: `${progressPercent}%` }} />
+              </div>
+              <p className='progress-hint'>
+                Ihr Fortschritt wird automatisch in Ihrem Browser gespeichert. Sie können den Test jederzeit
+                unterbrechen und später über denselben Link fortsetzen.
+              </p>
+            </div>
+            )
+          : null}
+
+        {items !== false && answeredCount === 0
+          ? (
+            <div className='language-wrapper'>
+              <label htmlFor='testLanguage'>Testsprache</label>
+              <select id='testLanguage' className='rdsim-select' value={selectedLanguage} onChange={handleLanguageChange}>
+                {getInfo().languages.map(lang => (
+                  <option value={lang.id} key={lang.id}>{lang.text}</option>
+                ))}
+              </select>
+            </div>
+            )
+          : null}
+
+        {items !== false && revealedCount === items.length
           ? (
             <div className='submit-wrapper'>
               <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit} disabled={isSubmitting}>
@@ -163,15 +210,59 @@ const Test = props => {
             </div>
             )
           : null}
-        {items !== false
-          ? items.map(item => parseInt(item.num, 10) <= nowShowing + 1 ? <Item data={item} answers={answers} setAnswer={setAnswer} key={item.id} /> : null)
-          : null}
+        {visibleItems.map(item => <Item data={item} answers={answers} setAnswer={setAnswer} key={item.id} />)}
         <style jsx>
           {`
             .greeting {
               text-align: center;
               color: var(--rdsim-text);
               margin-bottom: 10px;
+            }
+            .progress-wrapper {
+              max-width: 480px;
+              margin: 0 auto 20px;
+              text-align: center;
+            }
+            .progress-label {
+              color: var(--rdsim-text);
+              font-size: 13px;
+              font-weight: 700;
+              letter-spacing: 0.04em;
+              text-transform: uppercase;
+              margin-bottom: 6px;
+            }
+            .progress-track {
+              background: rgba(255, 255, 255, 0.08);
+              border: 1px solid var(--rdsim-border);
+              height: 8px;
+              overflow: hidden;
+            }
+            .progress-fill {
+              background: linear-gradient(135deg, var(--rdsim-red) 0%, var(--rdsim-orange) 100%);
+              height: 100%;
+              transition: width 0.3s ease;
+            }
+            .progress-hint {
+              color: var(--rdsim-muted);
+              font-size: 13px;
+              margin-top: 10px;
+            }
+            .language-wrapper {
+              max-width: 320px;
+              margin: 0 auto 20px;
+              text-align: center;
+            }
+            .language-wrapper label {
+              display: block;
+              color: var(--rdsim-muted);
+              font-size: 12px;
+              font-weight: 700;
+              letter-spacing: 0.04em;
+              text-transform: uppercase;
+              margin-bottom: 6px;
+            }
+            .language-wrapper select {
+              width: 100%;
             }
             .submit-wrapper {
               text-align: center;

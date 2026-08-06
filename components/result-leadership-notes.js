@@ -40,3 +40,36 @@ export function getLeadershipNote (domainCode, scoreText, language) {
   }
   return domainNotes[scoreText] || null
 }
+
+const REFLECTION_QUESTIONS = {
+  de: {
+    O: [
+      'In welchen Einsatzlagen sind Sie besonders offen für neue Lösungswege – und wann halten Sie bewusst an Bewährtem fest?',
+      'Wie reagieren Sie, wenn eine Lage Ihren ursprünglichen Plan komplett über den Haufen wirft?'
+    ],
+    C: [
+      'Wie stark verlassen Sie sich in stressigen Lagen auf Checklisten und Standardabläufe – und wann weichen Sie bewusst davon ab?',
+      'Woran erkennen Sie, dass Struktur Ihnen hilft – und wann wird sie eher zur Last?'
+    ],
+    E: [
+      'Wie treten Sie typischerweise auf, wenn Sie vor Ort schnell und klar Anweisungen geben müssen?',
+      'Wann fällt es Ihnen leicht, anderen im Team zuzuhören – und wann eher schwer?'
+    ],
+    A: [
+      'Wie gehen Sie mit Situationen um, in denen Sie eine unpopuläre, aber notwendige Entscheidung treffen müssen – etwa bei einer Triage?',
+      'Woran merken Sie, dass Rücksichtnahme Ihre Entscheidungsfähigkeit beeinträchtigt – oder sie gerade stärkt?'
+    ],
+    N: [
+      'Wie äußert sich bei Ihnen persönlich Stress in Extremsituationen – körperlich, gedanklich, im Verhalten?',
+      'Welche Strategien haben Ihnen in der Vergangenheit geholfen, unter Druck handlungsfähig zu bleiben?'
+    ]
+  }
+}
+
+export function getReflectionQuestions (domainCode, language) {
+  const languageQuestions = REFLECTION_QUESTIONS[language]
+  if (!languageQuestions) {
+    return []
+  }
+  return languageQuestions[domainCode] || []
+}

@@ -308,6 +308,35 @@ function drawSectionHeading (pdf, text, x, y, color) {
   return y + 22
 }
 
+function drawNoteBox (pdf, label, text, x, y, width, pageWidth, pageHeight, logoDataUrl, participantName, color) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8.8)
+  const noteLines = pdf.splitTextToSize(text, width - 24)
+  const noteHeight = 26 + noteLines.length * 11.5
+  const drawnY = ensureSpace(pdf, y, noteHeight + 10, pageWidth, pageHeight, logoDataUrl, participantName)
+  pdf.setFillColor(255, 248, 236)
+  pdf.rect(x, drawnY, width, noteHeight, 'F')
+  pdf.setFillColor(...hexToRgb(color))
+  pdf.rect(x, drawnY, 3, noteHeight, 'F')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  pdf.setTextColor(...hexToRgb(color))
+  pdf.text(label.toUpperCase(), x + 12, drawnY + 15)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8.8)
+  pdf.setTextColor(...hexToRgb(TEXT))
+  pdf.text(noteLines, x + 12, drawnY + 29)
+  return drawnY + noteHeight + 14
+}
+
+function drawBulletList (pdf, items, x, y, width, pageWidth, pageHeight, logoDataUrl, participantName, options = {}) {
+  let cursorY = y
+  items.forEach(item => {
+    cursorY = drawParagraphs(pdf, `–  ${item}`, x, cursorY, width, pageWidth, pageHeight, logoDataUrl, participantName, options)
+  })
+  return cursorY
+}
+
 async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
@@ -382,15 +411,57 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   const tocPage = pdf.internal.getNumberOfPages()
   drawHeader(pdf, pageWidth, logoDataUrl, participantName, tocPage - 1)
 
+  // --- Management summary page: the two most pronounced domains, condensed ---
+  newPage(pdf, pageWidth, logoDataUrl, participantName)
+  const summaryStartPage = pdf.internal.getNumberOfPages()
+  const sections = [{
+    title: 'Kurzfassung',
+    color: NAVY,
+    startPage: summaryStartPage,
+    bullets: ['Ihre stärksten Ausprägungen', 'Kurzeinschätzung für die Führungsrolle']
+  }]
+
+  let summaryY = HEADER_BOTTOM + 24
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(...hexToRgb(ORANGE))
+  pdf.text('BIG FIVE TEST · IHRE ERGEBNISSE IN KÜRZE', PAGE_MARGIN, summaryY)
+  summaryY += 24
+  drawSplitHeadline(pdf, 'IHRE', 'KERNERGEBNISSE', PAGE_MARGIN, summaryY, 24, TEXT)
+  summaryY += 28
+
+  summaryY = drawParagraphs(
+    pdf,
+    'Diese Kurzfassung zeigt Ihre beiden am stärksten ausgeprägten Dimensionen und was das für Ihre Führungsrolle im Rettungsdienst bedeutet. Die vollständige Auswertung aller fünf Dimensionen folgt ab der Übersichtsseite.',
+    PAGE_MARGIN, summaryY, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, { color: MUTED, fontSize: 9.5 }
+  )
+  summaryY += 10
+
+  const domainsWithColor = resume.map((domain, index) => ({ domain, color: DOMAIN_COLORS[index % DOMAIN_COLORS.length] }))
+  const topDomains = [...domainsWithColor]
+    .sort((a, b) => Math.abs(b.domain.score - 60) - Math.abs(a.domain.score - 60))
+    .slice(0, 2)
+
+  topDomains.forEach(({ domain, color }) => {
+    summaryY = ensureSpace(pdf, summaryY, 60, pageWidth, pageHeight, logoDataUrl, participantName)
+    summaryY = drawLabelBar(pdf, `${domain.title} – ${domain.score}/120 (${domain.scoreText})`, PAGE_MARGIN, summaryY, contentWidth, color)
+    summaryY += 14
+    summaryY = drawParagraphs(pdf, domain.text, PAGE_MARGIN, summaryY, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, { bold: true })
+    if (domain.leadershipNote) {
+      summaryY = drawNoteBox(pdf, 'Für Führung im Rettungsdienst', domain.leadershipNote, PAGE_MARGIN, summaryY, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, color)
+    }
+    summaryY += 16
+  })
+
   // --- Overview page ---
   let y = newPage(pdf, pageWidth, logoDataUrl, participantName)
   const overviewStartPage = pdf.internal.getNumberOfPages()
-  const sections = [{
+  sections.push({
     title: 'Übersicht',
     color: RED,
     startPage: overviewStartPage,
     bullets: ['Gesamtprofil aller fünf Dimensionen', 'Zentrale Kennzahlen im Überblick']
-  }]
+  })
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(9)
@@ -469,24 +540,15 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
     y = drawParagraphs(pdf, domain.description, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName)
 
     if (domain.leadershipNote) {
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(8.8)
-      const noteLines = pdf.splitTextToSize(domain.leadershipNote, contentWidth - 24)
-      const noteHeight = 26 + noteLines.length * 11.5
-      y = ensureSpace(pdf, y, noteHeight + 10, pageWidth, pageHeight, logoDataUrl, participantName)
-      pdf.setFillColor(255, 248, 236)
-      pdf.rect(PAGE_MARGIN, y, contentWidth, noteHeight, 'F')
-      pdf.setFillColor(...hexToRgb(ORANGE))
-      pdf.rect(PAGE_MARGIN, y, 3, noteHeight, 'F')
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(8)
-      pdf.setTextColor(...hexToRgb(ORANGE))
-      pdf.text('FÜR FÜHRUNG IM RETTUNGSDIENST', PAGE_MARGIN + 12, y + 15)
-      pdf.setFont('helvetica', 'normal')
-      pdf.setFontSize(8.8)
-      pdf.setTextColor(...hexToRgb(TEXT))
-      pdf.text(noteLines, PAGE_MARGIN + 12, y + 29)
-      y += noteHeight + 14
+      y = drawNoteBox(pdf, 'Für Führung im Rettungsdienst', domain.leadershipNote, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, ORANGE)
+    }
+
+    if (domain.reflectionQuestions && domain.reflectionQuestions.length) {
+      y += 4
+      y = ensureSpace(pdf, y, 30, pageWidth, pageHeight, logoDataUrl, participantName)
+      y = drawSectionHeading(pdf, 'Reflexionsfragen', PAGE_MARGIN, y, color)
+      y = drawBulletList(pdf, domain.reflectionQuestions, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, { fontSize: 9.5, lineHeight: 12 })
+      y += 6
     }
 
     if (domain.facets && domain.facets.length) {

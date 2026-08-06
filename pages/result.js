@@ -5,7 +5,7 @@ import Resume from '../components/Resume'
 import AddResults from '../components/AddResults'
 import LoadFile from '../components/LoadFile'
 import generatePdfReport, { generatePdfReportDataUri } from '../components/pdf-report'
-import { getLeadershipNote } from '../components/result-leadership-notes'
+import { getLeadershipNote, getReflectionQuestions } from '../components/result-leadership-notes'
 const { unpack } = require('jcb64')
 const calculateScore = require('@alheimsins/bigfive-calculate-score')
 const getResult = require('@alheimsins/b5-result-text')
@@ -14,7 +14,8 @@ const FileSaver = require('file-saver')
 
 function decorateResume (resume, language) {
   return resume.map(domain => Object.assign({}, domain, {
-    leadershipNote: getLeadershipNote(domain.domain, domain.scoreText, language)
+    leadershipNote: getLeadershipNote(domain.domain, domain.scoreText, language),
+    reflectionQuestions: getReflectionQuestions(domain.domain, language)
   }))
 }
 

@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import Head from 'next/head'
 import Page from '../components/Page'
 import AddComparison from '../components/AddComparison'
 import Comparisons from '../components/Comparisons'
@@ -15,8 +16,8 @@ export default class Compare extends Component {
     this.state = {
       comparisons: [],
       scores: false,
-      language: 'en',
-      viewLanguage: 'en'
+      language: 'de',
+      viewLanguage: 'de'
     }
     this.addComparison = this.addComparison.bind(this)
     this.getWidth = this.getWidth.bind(this)
@@ -123,25 +124,30 @@ export default class Compare extends Component {
 
   render () {
     return (
-      <Page>
-        <div className='rdsim-eyebrow no-print'>Persönlichkeitstest</div>
-        <h1 className='rdsim-title no-print'>Vergleich<span className='dot'>.</span></h1>
-        {languages.map((lang, index) => <button data-language={lang.id} onClick={this.handleTranslate} className={`rdsim-btn rdsim-btn-secondary no-print${lang === this.state.viewLanguage ? ' isActive' : ''}`} key={index}>{lang.text}</button>)}
-        <AddComparison addComparison={this.addComparison} />
-        <LoadFile handler={this.loadResult} buttonTitle='Load result' />
-        {this.state.scores ? <Comparisons data={this.state.scores} chartWidth={this.state.chartWidth} /> : null}
-        {this.state.comparisons.length > 0 ? <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleSaveComparison}>Save comparison</button> : null}
-        {this.state.comparisons.length === 0 ? <LoadFile handler={this.loadComparison} buttonTitle='Load comparison' /> : null}
-        <style jsx>
-          {`
-            @media print {
-              .no-print, .no-print * {
-                display: none !important;
+      <>
+        <Head>
+          <title>Vergleich | Big Five Persönlichkeitstest</title>
+        </Head>
+        <Page>
+          <div className='rdsim-eyebrow no-print'>Persönlichkeitstest</div>
+          <h1 className='rdsim-title no-print'>Vergleich<span className='dot'>.</span></h1>
+          {languages.map((lang, index) => <button data-language={lang.id} onClick={this.handleTranslate} className={`rdsim-btn rdsim-btn-secondary no-print${lang === this.state.viewLanguage ? ' isActive' : ''}`} key={index}>{lang.text}</button>)}
+          <AddComparison addComparison={this.addComparison} />
+          <LoadFile handler={this.loadResult} buttonTitle='Ergebnis laden' />
+          {this.state.scores ? <Comparisons data={this.state.scores} chartWidth={this.state.chartWidth} /> : null}
+          {this.state.comparisons.length > 0 ? <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleSaveComparison}>Vergleich speichern</button> : null}
+          {this.state.comparisons.length === 0 ? <LoadFile handler={this.loadComparison} buttonTitle='Vergleich laden' /> : null}
+          <style jsx>
+            {`
+              @media print {
+                .no-print, .no-print * {
+                  display: none !important;
+                }
               }
-            }
-          `}
-        </style>
-      </Page>
+            `}
+          </style>
+        </Page>
+      </>
     )
   }
 }

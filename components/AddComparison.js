@@ -1,9 +1,9 @@
 export default ({ addComparison }) => (
   <form onSubmit={addComparison} className='no-print'>
-    <input className='rdsim-input' type='text' id='comparisonName' placeholder='Name for comparison' required />
-    <input className='rdsim-input' type='text' id='comparisonData' placeholder='URL or id for comparison' required />
+    <input className='rdsim-input' type='text' id='comparisonName' placeholder='Name für den Vergleich' required />
+    <input className='rdsim-input' type='text' id='comparisonData' placeholder='URL oder ID für den Vergleich' required />
     <br />
-    <button className='rdsim-btn rdsim-btn-primary' type='submit'>Add</button>
+    <button className='rdsim-btn rdsim-btn-primary' type='submit'>Hinzufügen</button>
     <style jsx>
       {`
         input {
