@@ -8,6 +8,7 @@ export default ({ children }) => (
           padding-bottom: 50px;
           margin: auto;
           width: 100%;
+          min-width: 0;
           height: 100%;
         }
       `}

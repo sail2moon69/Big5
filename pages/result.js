@@ -6,6 +6,7 @@ import AddResults from '../components/AddResults'
 import LoadFile from '../components/LoadFile'
 import generatePdfReport, { generatePdfReportDataUri } from '../components/pdf-report'
 import { getLeadershipNote, getReflectionQuestions } from '../components/result-leadership-notes'
+import { translateScoreText } from '../components/score-text'
 const { unpack } = require('jcb64')
 const calculateScore = require('@alheimsins/bigfive-calculate-score')
 const getResult = require('@alheimsins/b5-result-text')
@@ -13,10 +14,21 @@ const { getInfo } = require('@alheimsins/b5-result-text')
 const FileSaver = require('file-saver')
 
 function decorateResume (resume, language) {
-  return resume.map(domain => Object.assign({}, domain, {
-    leadershipNote: getLeadershipNote(domain.domain, domain.scoreText, language),
-    reflectionQuestions: getReflectionQuestions(domain.domain, language)
-  }))
+  return resume.map(domain => {
+    // look up leadership notes/reflection questions by the library's raw (always-English) scoreText,
+    // before it gets translated for display below
+    const leadershipNote = getLeadershipNote(domain.domain, domain.scoreText, language)
+    const reflectionQuestions = getReflectionQuestions(domain.domain, language)
+    const facets = domain.facets
+      ? domain.facets.map(facet => Object.assign({}, facet, { scoreText: translateScoreText(facet.scoreText, language) }))
+      : domain.facets
+    return Object.assign({}, domain, {
+      scoreText: translateScoreText(domain.scoreText, language),
+      leadershipNote,
+      reflectionQuestions,
+      facets
+    })
+  })
 }
 
 export default class Result extends Component {
@@ -34,7 +46,8 @@ export default class Result extends Component {
       recipientEmail: '',
       isSendingReport: false,
       sendReportStatus: false,
-      sealedSendStatus: false
+      sealedSendStatus: false,
+      loadError: false
     }
     this.addResults = this.addResults.bind(this)
     this.getWidth = this.getWidth.bind(this)
@@ -74,37 +87,47 @@ export default class Result extends Component {
     }
   }
 
+  resultsToState (results) {
+    const scores = calculateScore({ answers: results.answers })
+    const info = getInfo()
+    let language = this.state.language
+    if (info.languages.map(lang => lang.id).includes(results.language)) {
+      language = results.language
+    }
+    const resume = decorateResume(getResult({ scores: scores, lang: language }), language)
+    return {
+      scores: scores,
+      resume: resume,
+      language: results.language,
+      viewLanguage: language,
+      results: results,
+      recipientEmail: results.email || '',
+      loadError: false
+    }
+  }
+
   async componentDidMount () {
     const params = new URLSearchParams(window.location.search.replace('?', ''))
     const queryId = params.get('id')
     if (queryId) {
-      const b64 = queryId
-      const results = unpack(b64)
-      const scores = calculateScore({ answers: results.answers })
-      const info = getInfo()
-      let language = this.state.language
-      if (info.languages.map(lang => lang.id).includes(results.language)) {
-        language = results.language
+      try {
+        const b64 = queryId
+        const results = unpack(b64)
+        const stateUpdate = this.resultsToState(results)
+        this.setState(Object.assign({ b64: b64 }, stateUpdate))
+        this.maybeSendSealedReport(results, stateUpdate.resume, b64, stateUpdate.viewLanguage)
+      } catch (error) {
+        this.setState({ loadError: 'Der Link scheint beschädigt oder unvollständig zu sein. Bitte prüfen Sie den Link oder wenden Sie sich an Ihre Lehrgangsleitung.' })
       }
-      const resume = decorateResume(getResult({ scores: scores, lang: language }), language)
-      this.setState({
-        b64: b64,
-        scores: scores,
-        resume: resume,
-        language: results.language,
-        viewLanguage: language,
-        results: results,
-        recipientEmail: results.email || ''
-      })
-      this.maybeSendSealedReport(results, resume, b64, language)
     }
     document.addEventListener('DOMContentLoaded', this.getWidth(), false)
     window.addEventListener('resize', this.getWidth.bind(this))
   }
 
   getWidth () {
-    const width = document.documentElement.clientWidth * 0.9
-    this.setState({ chartWidth: width >= 500 ? width : 500 })
+    // subtract the grid gutters + card padding around the chart so it fits its actual container, not the full viewport
+    const width = document.documentElement.clientWidth - 80
+    this.setState({ chartWidth: Math.max(width, 260) })
   }
 
   addResults (e) {
@@ -118,25 +141,15 @@ export default class Result extends Component {
     } else {
       b64 = compressedDataField.value
     }
-    const results = unpack(b64)
-    const scores = calculateScore({ answers: results.answers })
-    const info = getInfo()
-    let language = this.state.language
-    if (info.languages.map(lang => lang.id).includes(results.language)) {
-      language = results.language
+    try {
+      const results = unpack(b64)
+      const stateUpdate = this.resultsToState(results)
+      this.setState(Object.assign({ b64: b64 }, stateUpdate))
+      this.maybeSendSealedReport(results, stateUpdate.resume, b64, stateUpdate.viewLanguage)
+      compressedDataField.value = ''
+    } catch (error) {
+      this.setState({ loadError: 'Die eingefügten Daten konnten nicht gelesen werden. Bitte prüfen Sie den Link bzw. die ID.' })
     }
-    const resume = decorateResume(getResult({ scores: scores, lang: language }), language)
-    this.setState({
-      b64: b64,
-      scores: scores,
-      resume: resume,
-      language: results.language,
-      viewLanguage: language,
-      results: results,
-      recipientEmail: results.email || ''
-    })
-    this.maybeSendSealedReport(results, resume, b64, language)
-    compressedDataField.value = ''
   }
 
   loadResults (e) {
@@ -144,24 +157,15 @@ export default class Result extends Component {
     const reader = new window.FileReader()
     const files = e.target.files
     reader.onload = () => {
-      const text = reader.result
-      const results = JSON.parse(text)
-      const scores = calculateScore({ answers: results.answers })
-      const info = getInfo()
-      let language = this.state.language
-      if (info.languages.map(lang => lang.id).includes(results.language)) {
-        language = results.language
+      try {
+        const text = reader.result
+        const results = JSON.parse(text)
+        const stateUpdate = this.resultsToState(results)
+        this.setState(stateUpdate)
+        this.maybeSendSealedReport(results, stateUpdate.resume, false, stateUpdate.viewLanguage)
+      } catch (error) {
+        this.setState({ loadError: 'Die Datei konnte nicht gelesen werden. Bitte prüfen Sie das Dateiformat.' })
       }
-      const resume = decorateResume(getResult({ scores: scores, lang: language }), language)
-      this.setState({
-        scores: scores,
-        resume: resume,
-        language: results.language,
-        viewLanguage: language,
-        results: results,
-        recipientEmail: results.email || ''
-      })
-      this.maybeSendSealedReport(results, resume, false, language)
     }
     if (files.length === 1) {
       reader.readAsText(files[0])
@@ -209,14 +213,14 @@ export default class Result extends Component {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: participantName, email, pdfBase64: dataUri })
       })
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        this.setState({ sendReportStatus: { error: data.error || 'Versand fehlgeschlagen.' } })
+        this.setState({ sendReportStatus: { error: data.error || 'Versand fehlgeschlagen. Bitte versuchen Sie es später erneut.' } })
       } else {
         this.setState({ sendReportStatus: { ok: true } })
       }
     } catch (error) {
-      this.setState({ sendReportStatus: { error: 'Versand fehlgeschlagen: ' + error.message } })
+      this.setState({ sendReportStatus: { error: 'Versand fehlgeschlagen. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.' } })
     }
     this.setState({ isSendingReport: false })
   }
@@ -274,6 +278,7 @@ export default class Result extends Component {
           <h1 className='rdsim-title'>Ergebnis<span className='dot'>.</span></h1>
           {this.state.results && this.state.results.name ? <p className='greeting'>für <strong>{this.state.results.name}</strong></p> : null}
           {getInfo().languages.map((lang, index) => <button data-language={lang.id} onClick={this.handleTranslateResume} className={`rdsim-btn rdsim-btn-secondary${lang.id === this.state.viewLanguage ? ' isActive' : ''}`} key={index}>{lang.text}</button>)}
+          {this.state.loadError ? <p className='load-error'>{this.state.loadError}</p> : null}
           {this.state.resume === false ? <AddResults addResults={this.addResults} /> : null}
           {this.state.resume === false ? <LoadFile handler={this.loadResults} buttonTitle='Hochladen' /> : null}
           {this.state.resume !== false
@@ -319,6 +324,12 @@ export default class Result extends Component {
               }
               .send-status.error {
                 color: var(--rdsim-red);
+              }
+              .load-error {
+                text-align: center;
+                color: var(--rdsim-red);
+                max-width: 480px;
+                margin: 10px auto;
               }
             `}
           </style>

@@ -141,14 +141,14 @@ const Invite = () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ recipients, ccEmail: ccEmail.trim() || undefined, lehrgangsmodus: sealed })
       })
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        setSendSummary({ error: data.error || 'Versand fehlgeschlagen.' })
+        setSendSummary({ error: data.error || 'Versand fehlgeschlagen. Bitte versuchen Sie es später erneut.' })
       } else {
         setSendSummary({ results: data.results })
       }
     } catch (error) {
-      setSendSummary({ error: 'Versand fehlgeschlagen: ' + error.message })
+      setSendSummary({ error: 'Versand fehlgeschlagen. Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.' })
     }
     setIsSendingEmails(false)
   }

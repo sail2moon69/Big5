@@ -51,9 +51,9 @@ const Navbar = () => (
       ul {
         margin: 0;
         padding: 0;
-        width: 100%;
         list-style-type: none;
         display: flex;
+        min-width: 0;
       }
       ul.left {
         justify-content: flex-start;
@@ -79,6 +79,7 @@ const Navbar = () => (
         font-weight: 900;
         letter-spacing: -0.01em;
         text-transform: uppercase;
+        white-space: nowrap;
       }
       .brand .dot {
         color: var(--rdsim-red);
@@ -97,6 +98,19 @@ const Navbar = () => (
       @media screen and (max-width: 500px) {
         .app-name, .sep {
           display: none;
+        }
+      }
+      @media screen and (max-width: 400px) {
+        li {
+          margin: 6px;
+          font-size: 15px;
+        }
+        .brand {
+          font-size: 13px;
+        }
+        a {
+          font-size: 11px;
+          letter-spacing: 0.02em;
         }
       }
     `}

@@ -7,7 +7,7 @@ const Index = props => {
   return (
     <>
       <Head>
-        <title>Big five webapp</title>
+        <title>Big Five Test | rd-sim.de</title>
       </Head>
       <Page>
         <Hero eyebrow='Persönlichkeitstest' title='Big Five' slogan='Kenne dich selbst. Führe mit Klarheit.' />

@@ -118,8 +118,9 @@ export default class Compare extends Component {
   }
 
   getWidth () {
-    const width = document.documentElement.clientWidth * 0.9
-    this.setState({ chartWidth: width >= 500 ? width : 500 })
+    // subtract the grid gutters + card padding around the chart so it fits its actual container, not the full viewport
+    const width = document.documentElement.clientWidth - 80
+    this.setState({ chartWidth: Math.max(width, 260) })
   }
 
   render () {

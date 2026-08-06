@@ -8,7 +8,7 @@ class MyDocument extends Document {
 
   render () {
     return (
-      <Html lang='en'>
+      <Html lang='de'>
         <Head>
           <link rel='apple-touch-icon' sizes='57x57' href='static/apple-icon-57x57.png' />
           <link rel='apple-touch-icon' sizes='60x60' href='static/apple-icon-60x60.png' />
@@ -28,7 +28,7 @@ class MyDocument extends Document {
           <meta name='msapplication-TileImage' content='static/ms-icon-144x144.png' />
           <meta name='theme-color' content='#000000' />
           <meta name='viewport' content='width=device-width, initial-scale=1.0' />
-          <meta name='description' content='Webapp for big five personality test' />
+          <meta name='description' content='Big Five Persönlichkeitstest für die Führungsausbildung im Rettungsdienst.' />
         </Head>
         <body>
           <Main />

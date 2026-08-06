@@ -3,11 +3,7 @@ import Head from 'next/head'
 export default ({ children }) => (
   <div className='container'>
     <Head>
-      <meta name='viewport' content='initial-scale=0.8, maximum-scale=0.8, minimum-scale=0.8 user-scalable=no, width=device-width' />
       <link rel='icon' type='image/png' href='/static/rdsim-favicon.png' />
-      <title>
-        Big Five Test | rd-sim.de
-      </title>
     </Head>
     {children}
     <style jsx global>
@@ -29,6 +25,7 @@ export default ({ children }) => (
           padding: 0;
           height: 100%;
           text-align: center;
+          overflow-wrap: break-word;
         }
         div.fullscreen.fullscreen-enabled {
           background-color: black !important;

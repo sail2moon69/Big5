@@ -1,8 +1,8 @@
 export default ({ addResults }) => (
   <form onSubmit={addResults}>
-    <input className='rdsim-input' type='text' id='resultData' placeholder='URL or id for result' required />
+    <input className='rdsim-input' type='text' id='resultData' placeholder='URL oder ID des Ergebnisses' required />
     <br />
-    <button className='rdsim-btn rdsim-btn-primary' type='submit'>Add</button>
+    <button className='rdsim-btn rdsim-btn-primary' type='submit'>Hinzufügen</button>
     <style jsx>
       {`
         input {
