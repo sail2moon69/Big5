@@ -28,24 +28,21 @@ location = /api/send-report {
     client_max_body_size 25m;
     proxy_read_timeout 120s;
 
+    proxy_pass http://127.0.0.1:4001/send-report;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_pass http://127.0.0.1:4001/send-report;
 }
 
-# Alles andere unter /api/ (insbesondere /api/send-invites) bleibt geschützt
+# Alles andere unter /api/ (insbesondere /api/send-invites) bleibt geschützt.
+# Dieser Block existiert bereits und bleibt unverändert - hier nur zur Dokumentation.
 location /api/ {
     auth_basic "Zugang für Übungsleitung";
-    auth_basic_user_file /etc/nginx/.htpasswd;
+    auth_basic_user_file /var/www/big5.rd-sim.de/secrets/invite.htpasswd;
 
     client_max_body_size 25m;
     proxy_read_timeout 120s;
 
+    proxy_pass http://127.0.0.1:4001/;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_pass http://127.0.0.1:4001/;
 }
