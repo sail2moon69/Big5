@@ -1,0 +1,51 @@
+# Beispiel-Konfiguration für den /api/-Proxy von big5.rd-sim.de
+#
+# Diese Datei ist KEIN Shell-Skript. Der Inhalt gehört in die nginx-Server-
+# konfiguration, üblicherweise /etc/nginx/sites-available/big5.rd-sim.de,
+# innerhalb des bestehenden "server { ... }"-Blocks.
+#
+# Danach:
+#   nginx -t && systemctl reload nginx
+#
+# Hintergrund: Der Ergebnisversand im Lehrgangsmodus läuft aus dem Browser
+# der teilnehmenden Person. Liegt /api/ komplett hinter Basic Auth, antwortet
+# nginx mit 401 und der Versand schlägt fehl. Nur /api/send-report darf daher
+# ohne Basic Auth erreichbar sein - alles andere unter /api/ bleibt geschützt.
+
+# --- in den http{}-Block (z. B. /etc/nginx/nginx.conf), nicht in server{} ---
+# limit_req_zone $binary_remote_addr zone=sendreport:10m rate=10r/m;
+
+# --- ab hier in den server{}-Block der Site ---
+
+# Ergebnisversand: ohne Basic Auth, dafür eng begrenzt
+location = /api/send-report {
+    auth_basic off;
+
+    limit_req zone=sendreport burst=5 nodelay;
+    limit_except POST { deny all; }
+
+    # Der PDF-Report wird als Base64 übertragen und sprengt das 1-MB-Default
+    client_max_body_size 25m;
+    proxy_read_timeout 120s;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_pass http://127.0.0.1:4001/send-report;
+}
+
+# Alles andere unter /api/ (insbesondere /api/send-invites) bleibt geschützt
+location /api/ {
+    auth_basic "Zugang für Übungsleitung";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    client_max_body_size 25m;
+    proxy_read_timeout 120s;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_pass http://127.0.0.1:4001/;
+}

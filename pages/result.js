@@ -1,4 +1,4 @@
-import { Component } from 'react'
+import { Component, createRef } from 'react'
 import Head from 'next/head'
 import Page from '../components/Page'
 import Resume from '../components/Resume'
@@ -47,8 +47,12 @@ export default class Result extends Component {
       isSendingReport: false,
       sendReportStatus: false,
       sealedSendStatus: false,
+      sealedPayload: false,
+      sealedLink: false,
+      sealedCopyStatus: false,
       loadError: false
     }
+    this.sealedLinkRef = createRef()
     this.addResults = this.addResults.bind(this)
     this.getWidth = this.getWidth.bind(this)
     this.loadResults = this.loadResults.bind(this)
@@ -56,18 +60,46 @@ export default class Result extends Component {
     this.handleDownloadPdf = this.handleDownloadPdf.bind(this)
     this.handleSendReport = this.handleSendReport.bind(this)
     this.handleTranslateResume = this.handleTranslateResume.bind(this)
+    this.handleRetrySealedSend = this.handleRetrySealedSend.bind(this)
+    this.handleCopySealedLink = this.handleCopySealedLink.bind(this)
+    this.handleBeforeUnload = this.handleBeforeUnload.bind(this)
+  }
+
+  handleBeforeUnload (event) {
+    // while the sealed send is unresolved the result only exists in this URL - don't let it
+    // disappear with a closed tab
+    if (this.state.sealedSendStatus !== 'error' && this.state.sealedSendStatus !== 'sending') {
+      return undefined
+    }
+    event.preventDefault()
+    event.returnValue = ''
+    return ''
   }
 
   async maybeSendSealedReport (results, resume, b64, language) {
     if (!results || !results.sealed || !results.trainerEmail) {
       return
     }
+    // keep everything the send needs so the participant can retry without re-taking the test,
+    // and keep the result link so it can be handed to the course lead if the send keeps failing
+    this.setState({
+      sealedPayload: { results, resume, b64, language },
+      sealedLink: b64 ? `${window.location.origin}/result?id=${b64}` : false
+    })
+    await this.sendSealedReport({ results, resume, b64, language })
+  }
+
+  async sendSealedReport ({ results, resume, b64, language }) {
     const sentKey = 'big5-sealed-sent-' + (b64 || '')
-    if (window.localStorage.getItem(sentKey)) {
-      this.setState({ sealedSendStatus: 'sent' })
-      return
+    try {
+      if (window.localStorage.getItem(sentKey)) {
+        this.setState({ sealedSendStatus: 'sent' })
+        return
+      }
+    } catch (error) {
+      // storage unavailable (e.g. private browsing) - just send again, a duplicate mail beats a lost result
     }
-    this.setState({ sealedSendStatus: 'sending' })
+    this.setState({ sealedSendStatus: 'sending', sealedCopyStatus: false })
     try {
       const participantName = results.name || 'Teilnehmer:in'
       const { dataUri } = await generatePdfReportDataUri({ resume, viewLanguage: language, participantName: results.name })
@@ -77,13 +109,53 @@ export default class Result extends Component {
         body: JSON.stringify({ name: participantName, email: results.trainerEmail, pdfBase64: dataUri, sealed: true })
       })
       if (response.ok) {
-        window.localStorage.setItem(sentKey, '1')
+        try {
+          window.localStorage.setItem(sentKey, '1')
+        } catch (error) {
+          // ignore - the send succeeded, only the "already sent" marker is missing
+        }
         this.setState({ sealedSendStatus: 'sent' })
       } else {
         this.setState({ sealedSendStatus: 'error' })
       }
     } catch (error) {
       this.setState({ sealedSendStatus: 'error' })
+    }
+  }
+
+  async handleRetrySealedSend (e) {
+    e.preventDefault()
+    const payload = this.state.sealedPayload
+    if (!payload || this.state.sealedSendStatus === 'sending') {
+      return
+    }
+    try {
+      window.localStorage.removeItem('big5-sealed-sent-' + (payload.b64 || ''))
+    } catch (error) {
+      // ignore - nothing to clear if storage isn't available
+    }
+    await this.sendSealedReport(payload)
+  }
+
+  async handleCopySealedLink (e) {
+    e.preventDefault()
+    const link = this.state.sealedLink
+    if (!link) {
+      return
+    }
+    try {
+      if (window.navigator.clipboard && window.navigator.clipboard.writeText) {
+        await window.navigator.clipboard.writeText(link)
+        this.setState({ sealedCopyStatus: 'copied' })
+        return
+      }
+      const field = this.sealedLinkRef.current
+      field.focus()
+      field.select()
+      const copied = window.document.execCommand('copy')
+      this.setState({ sealedCopyStatus: copied ? 'copied' : 'failed' })
+    } catch (error) {
+      this.setState({ sealedCopyStatus: 'failed' })
     }
   }
 
@@ -122,6 +194,11 @@ export default class Result extends Component {
     }
     document.addEventListener('DOMContentLoaded', this.getWidth(), false)
     window.addEventListener('resize', this.getWidth.bind(this))
+    window.addEventListener('beforeunload', this.handleBeforeUnload)
+  }
+
+  componentWillUnmount () {
+    window.removeEventListener('beforeunload', this.handleBeforeUnload)
   }
 
   getWidth () {
@@ -247,8 +324,40 @@ export default class Result extends Component {
             <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
             <h1 className='rdsim-title'>Vielen Dank<span className='dot'>.</span></h1>
             <p className='sealed-message'>Sie erhalten Ihr Ergebnis in einem versiegelten Umschlag beim Lehrgang.</p>
+            {this.state.sealedSendStatus === 'sending'
+              ? <p className='send-status pending' role='status' aria-live='polite'>Ihr Ergebnis wird an die Lehrgangsleitung übermittelt…</p>
+              : null}
+            {this.state.sealedSendStatus === 'sent'
+              ? <p className='send-status ok' role='status' aria-live='polite'>Ihr Ergebnis wurde an die Lehrgangsleitung übermittelt.</p>
+              : null}
             {this.state.sealedSendStatus === 'error'
-              ? <p className='send-status error'>Beim Versand ist ein technisches Problem aufgetreten. Bitte wenden Sie sich an Ihre Lehrgangsleitung.</p>
+              ? (
+                <div className='send-failed' role='status' aria-live='polite'>
+                  <p className='send-status error'>Beim Versand ist ein technisches Problem aufgetreten.</p>
+                  <p className='sealed-hint'><strong>Ihr Ergebnis ist nicht verloren.</strong> Schließen Sie diese Seite bitte noch nicht und versuchen Sie es erneut.</p>
+                  <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleRetrySealedSend}>Erneut versuchen</button>
+                  {this.state.sealedLink
+                    ? (
+                      <div className='sealed-rescue'>
+                        <p className='sealed-hint'>Klappt es weiterhin nicht, geben Sie diesen Link an Ihre Lehrgangsleitung weiter – darin ist Ihr Ergebnis gespeichert:</p>
+                        <input
+                          className='rdsim-input sealed-link'
+                          type='text'
+                          readOnly
+                          value={this.state.sealedLink}
+                          ref={this.sealedLinkRef}
+                          onFocus={event => event.target.select()}
+                          aria-label='Link zu Ihrem Ergebnis'
+                        />
+                        <button className='rdsim-btn rdsim-btn-secondary' onClick={this.handleCopySealedLink}>Link kopieren</button>
+                        {this.state.sealedCopyStatus === 'copied' ? <span className='copy-status ok'>Link kopiert.</span> : null}
+                        {this.state.sealedCopyStatus === 'failed' ? <span className='copy-status error'>Kopieren nicht möglich – bitte ins Feld klicken und mit Strg+A und Strg+C kopieren.</span> : null}
+                        <p className='sealed-hint small'>Der Link enthält Ihre Antworten. Geben Sie ihn ausschließlich an Ihre Lehrgangsleitung weiter.</p>
+                      </div>
+                      )
+                    : <p className='sealed-hint'>Klappt es weiterhin nicht, wenden Sie sich bitte an Ihre Lehrgangsleitung.</p>}
+                </div>
+                )
               : null}
             <style jsx>
               {`
@@ -258,8 +367,52 @@ export default class Result extends Component {
                   margin: 20px auto;
                   max-width: 480px;
                 }
-                .send-status.error {
+                .send-status {
                   text-align: center;
+                  margin: 12px auto;
+                  max-width: 480px;
+                }
+                .send-status.error {
+                  color: var(--rdsim-red);
+                }
+                .send-status.pending,
+                .send-status.ok {
+                  color: var(--rdsim-text);
+                }
+                .send-failed {
+                  text-align: center;
+                  margin: 0 auto;
+                  max-width: 520px;
+                }
+                .sealed-hint {
+                  color: var(--rdsim-text);
+                  margin: 12px auto;
+                  max-width: 480px;
+                }
+                .sealed-hint.small {
+                  font-size: 13px;
+                  opacity: 0.8;
+                }
+                .sealed-rescue {
+                  margin-top: 28px;
+                }
+                .sealed-link {
+                  box-sizing: border-box;
+                  width: 100%;
+                  max-width: 480px;
+                  margin: 0 auto 12px;
+                  display: block;
+                  font-size: 13px;
+                }
+                .copy-status {
+                  display: block;
+                  margin-top: 8px;
+                  font-size: 13px;
+                }
+                .copy-status.ok {
+                  color: var(--rdsim-text);
+                }
+                .copy-status.error {
                   color: var(--rdsim-red);
                 }
               `}
