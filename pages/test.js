@@ -110,6 +110,10 @@ const Test = props => {
     if (isSubmitting) {
       return
     }
+    if (items !== false && Object.keys(answers).length < items.length) {
+      setSubmitError('Bitte beantworten Sie alle Fragen, bevor Sie den Test absenden.')
+      return
+    }
     setIsSubmitting(true)
     setSubmitError(false)
     try {
@@ -157,6 +161,21 @@ const Test = props => {
 
   const answeredCount = Object.keys(answers).length
   const totalCount = items !== false ? items.length : 120
+  // an unanswered item quietly skews the facet it belongs to, so the test has to be complete
+  const unansweredItems = items !== false ? items.filter(item => !(item.id in answers)) : []
+  const isComplete = items !== false && unansweredItems.length === 0
+
+  const scrollToFirstUnanswered = event => {
+    event.preventDefault()
+    const first = unansweredItems[0]
+    if (!first) {
+      return
+    }
+    const element = window.document.getElementById(`frage-${first.id}`)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
   const progressPercent = totalCount ? Math.round((answeredCount / totalCount) * 100) : 0
   const visibleItems = items !== false && revealedCount !== false
     ? items.slice(Math.max(items.length - revealedCount, 0))
@@ -203,9 +222,17 @@ const Test = props => {
         {items !== false && revealedCount === items.length
           ? (
             <div className='submit-wrapper'>
-              <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit} disabled={isSubmitting}>
+              <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit} disabled={isSubmitting || !isComplete}>
                 {isSubmitting ? 'Wird gesendet…' : 'Absenden'}
               </button>
+              {!isComplete
+                ? (
+                  <p className='submit-hint'>
+                    Noch {unansweredItems.length} {unansweredItems.length === 1 ? 'Frage ist' : 'Fragen sind'} unbeantwortet.{' '}
+                    <a href='#' onClick={scrollToFirstUnanswered}>Zur ersten offenen Frage</a>
+                  </p>
+                  )
+                : null}
               {submitError ? <p className='submit-error'>{submitError}</p> : null}
             </div>
             )
@@ -266,6 +293,15 @@ const Test = props => {
             }
             .submit-wrapper {
               text-align: center;
+            }
+            .submit-hint {
+              color: var(--rdsim-text);
+              font-size: 14px;
+              max-width: 480px;
+              margin: 12px auto 0;
+            }
+            .submit-hint a {
+              color: var(--rdsim-red);
             }
             .submit-error {
               color: var(--rdsim-red);
