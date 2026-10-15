@@ -12,6 +12,19 @@ const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'Big Five Test | rd-sim.de'
 const MAX_RECIPIENTS = 200
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// /send-report is reachable without basic auth, because it is called from the participant's
+// browser. These three settings are what keeps it from being an open mail relay.
+const TRAINER_EMAILS = (process.env.TRAINER_EMAILS || '')
+  .split(',')
+  .map(entry => entry.trim().toLowerCase())
+  .filter(Boolean)
+const ALLOW_SELF_SEND = process.env.ALLOW_SELF_SEND === 'true'
+const MAX_PDF_BYTES = Number(process.env.MAX_PDF_BYTES || 10 * 1024 * 1024)
+
+if (TRAINER_EMAILS.length === 0) {
+  console.warn('TRAINER_EMAILS is not set - every sealed result mail will be rejected')
+}
+
 function isConfigured () {
   return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASSWORD && MAIL_FROM_ADDRESS)
 }
@@ -28,6 +41,38 @@ app.use(express.json({ limit: '20mb' }))
 
 function isValidEmail (value) {
   return typeof value === 'string' && EMAIL_PATTERN.test(value.trim())
+}
+
+// An allowlist entry is either a full address or a domain written as "@example.org"
+function isAllowedRecipient (email) {
+  const value = email.trim().toLowerCase()
+  return TRAINER_EMAILS.some(entry => entry.startsWith('@') ? value.endsWith(entry) : entry === value)
+}
+
+function emailDomain (email) {
+  return String(email).split('@').pop().toLowerCase()
+}
+
+// Only let through something that really is a PDF, and only up to a sane size
+function decodePdf (pdfBase64) {
+  if (typeof pdfBase64 !== 'string') {
+    return { error: 'pdfBase64 must be a string' }
+  }
+  const data = pdfBase64.includes(',') ? pdfBase64.split(',').pop() : pdfBase64
+  const buffer = Buffer.from(data, 'base64')
+  if (buffer.length === 0) {
+    return { error: 'pdfBase64 is empty or not valid base64' }
+  }
+  if (buffer.length > MAX_PDF_BYTES) {
+    const limit = MAX_PDF_BYTES >= 1024 * 1024
+      ? `${Math.round(MAX_PDF_BYTES / 1024 / 1024)} MB`
+      : `${Math.round(MAX_PDF_BYTES / 1024)} KB`
+    return { error: `attachment too large (max ${limit})` }
+  }
+  if (buffer.toString('latin1', 0, 5) !== '%PDF-') {
+    return { error: 'attachment is not a PDF' }
+  }
+  return { buffer }
 }
 
 function escapeHtml (value) {
@@ -303,8 +348,7 @@ function buildReportEmailHtml (name) {
 </html>`
 }
 
-async function sendReportEmail ({ name, email, pdfBase64, sealed }) {
-  const base64Data = pdfBase64.includes(',') ? pdfBase64.split(',').pop() : pdfBase64
+async function sendReportEmail ({ name, email, pdf, sealed }) {
   await transporter.sendMail({
     from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`,
     to: sealed ? email : `"${name}" <${email}>`,
@@ -313,8 +357,7 @@ async function sendReportEmail ({ name, email, pdfBase64, sealed }) {
     html: sealed ? buildSealedReportEmailHtml(name) : buildReportEmailHtml(name),
     attachments: [{
       filename: 'big-five-ergebnisbericht.pdf',
-      content: base64Data,
-      encoding: 'base64',
+      content: pdf,
       contentType: 'application/pdf'
     }]
   })
@@ -332,8 +375,28 @@ app.post('/send-report', async (req, res) => {
     return
   }
 
+  const isSealed = Boolean(sealed)
+  if (isSealed) {
+    if (!isAllowedRecipient(email)) {
+      console.warn('send-report rejected: recipient not in TRAINER_EMAILS, domain', emailDomain(email))
+      res.status(403).json({ error: 'Die hinterlegte Empfängeradresse ist nicht freigegeben. Bitte wenden Sie sich an Ihre Lehrgangsleitung.' })
+      return
+    }
+  } else if (!ALLOW_SELF_SEND) {
+    console.warn('send-report rejected: self-send is disabled, domain', emailDomain(email))
+    res.status(403).json({ error: 'Der Mailversand an diese Adresse ist deaktiviert. Bitte nutzen Sie den PDF-Download.' })
+    return
+  }
+
+  const { buffer, error: pdfError } = decodePdf(pdfBase64)
+  if (pdfError) {
+    console.warn('send-report rejected:', pdfError)
+    res.status(400).json({ error: pdfError })
+    return
+  }
+
   try {
-    await sendReportEmail({ name, email: email.trim(), pdfBase64, sealed: Boolean(sealed) })
+    await sendReportEmail({ name, email: email.trim(), pdf: buffer, sealed: isSealed })
     res.json({ status: 'sent' })
   } catch (error) {
     res.status(500).json({ error: error.message })
