@@ -31,6 +31,11 @@ function decorateResume (resume, language) {
   })
 }
 
+// Mailing the report to oneself only works when the mail service allows it (ALLOW_SELF_SEND in
+// server/.env). The page is a static export, so it learns that at build time - set
+// NEXT_PUBLIC_ALLOW_SELF_SEND=true for the build in that case, otherwise the field stays hidden.
+const SELF_SEND_ENABLED = process.env.NEXT_PUBLIC_ALLOW_SELF_SEND === 'true'
+
 export default class Result extends Component {
   constructor (props) {
     super(props)
@@ -269,7 +274,7 @@ export default class Result extends Component {
 
   async handleSendReport (e) {
     e.preventDefault()
-    if (this.state.resume === false || this.state.isSendingReport) {
+    if (!SELF_SEND_ENABLED || this.state.resume === false || this.state.isSendingReport) {
       return
     }
     const email = this.state.recipientEmail.trim()
@@ -441,7 +446,7 @@ export default class Result extends Component {
           {this.state.resume !== false
             ? <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleDownloadPdf} disabled={this.state.isGeneratingPdf}>{this.state.isGeneratingPdf ? 'PDF wird erstellt…' : 'PDF herunterladen'}</button>
             : null}
-          {this.state.resume !== false
+          {SELF_SEND_ENABLED && this.state.resume !== false
             ? (
               <div className='send-report'>
                 <input
