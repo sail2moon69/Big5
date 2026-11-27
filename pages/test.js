@@ -27,6 +27,7 @@ const Test = props => {
   const [participantEmail, setParticipantEmail] = useState(false)
   const [participantSealed, setParticipantSealed] = useState(false)
   const [trainerEmail, setTrainerEmail] = useState(false)
+  const [brand, setBrand] = useState(false)
   const [storageKey, setStorageKey] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(false)
@@ -59,6 +60,7 @@ const Test = props => {
         setParticipantEmail(invite.email || false)
         setParticipantSealed(Boolean(invite.sealed && invite.trainerEmail))
         setTrainerEmail(invite.trainerEmail || false)
+        setBrand(invite.brand || false)
       } catch (error) {
         setParticipantName(false)
         setParticipantEmail(false)
@@ -136,6 +138,9 @@ const Test = props => {
       }
       if (participantEmail) {
         result.email = participantEmail
+      }
+      if (brand) {
+        result.brand = brand
       }
       if (participantSealed) {
         result.sealed = true

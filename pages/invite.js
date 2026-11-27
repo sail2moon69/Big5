@@ -2,11 +2,16 @@ import { useState } from 'react'
 import Head from 'next/head'
 import Page from '../components/Page'
 import generateInvitePdf from '../components/invite-pdf'
+import { BRAND_OPTIONS, DEFAULT_BRAND } from '../components/report-brands'
 const { getInfo } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
 const { pack } = require('jcb64')
 
-async function buildInvite (name, email, language, sealed, trainerEmail) {
+async function buildInvite (name, email, language, sealed, trainerEmail, brand) {
   const payload = { name, language }
+  // only a non-default layout goes into the link, so existing links and their length stay as they were
+  if (brand && brand !== DEFAULT_BRAND) {
+    payload.brand = brand
+  }
   if (email) {
     payload.email = email
   }
@@ -35,6 +40,8 @@ function parseBulkLine (line) {
 const Invite = () => {
   const { languages } = getInfo()
   const [mode, setMode] = useState('single')
+  // layout of the PDFs (invitation and result report); shared by single and group mode
+  const [brand, setBrand] = useState(DEFAULT_BRAND)
 
   // single-invite mode
   const [name, setName] = useState('')
@@ -61,7 +68,7 @@ const Invite = () => {
       return
     }
     setIsGenerating(true)
-    const result = await buildInvite(trimmedName, email.trim() || false, language)
+    const result = await buildInvite(trimmedName, email.trim() || false, language, false, false, brand)
     setInvite(result)
     setIsGenerating(false)
   }
@@ -102,7 +109,7 @@ const Invite = () => {
     setSendSummary(false)
     const results = []
     for (const entry of entries) {
-      results.push(await buildInvite(entry.name, entry.email, groupLanguage, sealed, trimmedCcEmail))
+      results.push(await buildInvite(entry.name, entry.email, groupLanguage, sealed, trimmedCcEmail, brand))
     }
     setGroupInvites(results)
     setIsGeneratingGroup(false)
@@ -118,7 +125,7 @@ const Invite = () => {
 
   const downloadGroupPdf = async event => {
     event.preventDefault()
-    await generateInvitePdf(groupInvites)
+    await generateInvitePdf(groupInvites, brand)
   }
 
   const sendGroupEmails = async event => {
@@ -200,6 +207,14 @@ const Invite = () => {
                         <option value={lang.id} key={lang.id}>{lang.text}</option>
                       ))}
                     </select>
+                    <label className='brand-label'>
+                      Layout des Ergebnisberichts
+                      <select className='rdsim-select' value={brand} onChange={event => setBrand(event.target.value)}>
+                        {BRAND_OPTIONS.map(option => (
+                          <option value={option.id} key={option.id}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <div>
                       <button className='rdsim-btn rdsim-btn-primary' type='submit' disabled={isGenerating}>
                         {isGenerating ? 'Erstelle…' : 'Einladung erstellen'}
@@ -254,6 +269,14 @@ const Invite = () => {
                         <option value={lang.id} key={lang.id}>{lang.text}</option>
                       ))}
                     </select>
+                    <label className='brand-label'>
+                      Layout des Ergebnisberichts
+                      <select className='rdsim-select' value={brand} onChange={event => setBrand(event.target.value)}>
+                        {BRAND_OPTIONS.map(option => (
+                          <option value={option.id} key={option.id}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <input
                       className='rdsim-input'
                       type='email'
@@ -332,6 +355,15 @@ const Invite = () => {
           {`
             select {
               margin-top: 10px;
+            }
+            .brand-label {
+              display: block;
+              margin-top: 10px;
+              font-size: 14px;
+            }
+            .brand-label select {
+              display: block;
+              margin: 4px auto 0;
             }
             .link-field {
               width: 100%;

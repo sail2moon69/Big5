@@ -107,7 +107,7 @@ export default class Result extends Component {
     this.setState({ sealedSendStatus: 'sending', sealedCopyStatus: false })
     try {
       const participantName = results.name || 'Teilnehmer:in'
-      const { dataUri } = await generatePdfReportDataUri({ resume, viewLanguage: language, participantName: results.name })
+      const { dataUri } = await generatePdfReportDataUri({ resume, viewLanguage: language, participantName: results.name, brand: results.brand })
       const response = await window.fetch('/api/send-report', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -268,7 +268,7 @@ export default class Result extends Component {
     }
     this.setState({ isGeneratingPdf: true })
     const participantName = this.state.results && this.state.results.name
-    await generatePdfReport({ resume: this.state.resume, viewLanguage: this.state.viewLanguage, participantName })
+    await generatePdfReport({ resume: this.state.resume, viewLanguage: this.state.viewLanguage, participantName, brand: this.state.results && this.state.results.brand })
     this.setState({ isGeneratingPdf: false })
   }
 
@@ -288,7 +288,8 @@ export default class Result extends Component {
       const { dataUri } = await generatePdfReportDataUri({
         resume: this.state.resume,
         viewLanguage: this.state.viewLanguage,
-        participantName: this.state.results && this.state.results.name
+        participantName: this.state.results && this.state.results.name,
+        brand: this.state.results && this.state.results.brand
       })
       const response = await window.fetch('/api/send-report', {
         method: 'POST',
