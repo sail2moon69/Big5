@@ -30,6 +30,25 @@ async function buildInvite (name, email, language, sealed, trainerEmail, brand) 
   return { name, email, link, qrDataUrl }
 }
 
+// 'allowed' | 'refused' | 'unknown' (server unreachable, not logged in, or an older server
+// without the endpoint) - only 'refused' blocks creating the links
+async function checkTrainerEmail (email) {
+  try {
+    const response = await window.fetch('/api/check-trainer', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email })
+    })
+    if (!response.ok) {
+      return 'unknown'
+    }
+    const data = await response.json()
+    return data.allowed ? 'allowed' : 'refused'
+  } catch (error) {
+    return 'unknown'
+  }
+}
+
 function parseBulkLine (line) {
   const [namePart, emailPart] = line.split(';')
   const name = (namePart || '').trim()
@@ -60,6 +79,9 @@ const Invite = () => {
   const [isGeneratingGroup, setIsGeneratingGroup] = useState(false)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
   const [sendSummary, setSendSummary] = useState(false)
+  // problems found before the links exist (shown in the form) and a non-blocking hint after
+  const [groupFormError, setGroupFormError] = useState(false)
+  const [trainerCheckWarning, setTrainerCheckWarning] = useState(false)
 
   const generateInvite = async event => {
     event.preventDefault()
@@ -93,8 +115,10 @@ const Invite = () => {
       return
     }
     const trimmedCcEmail = ccEmail.trim()
+    setGroupFormError(false)
+    setTrainerCheckWarning(false)
     if (sealed && !trimmedCcEmail) {
-      setSendSummary({ error: 'Im Lehrgangsmodus ist die E-Mail-Adresse der Lehrgangsleitung ein Pflichtfeld.' })
+      setGroupFormError('Im Lehrgangsmodus ist die E-Mail-Adresse der Lehrgangsleitung ein Pflichtfeld.')
       return
     }
     const entries = bulkText
@@ -107,6 +131,19 @@ const Invite = () => {
     }
     setIsGeneratingGroup(true)
     setSendSummary(false)
+    if (sealed) {
+      // The results will only ever be mailed to addresses the server allows (TRAINER_EMAILS).
+      // Find out now, not after the whole course has taken the test.
+      const check = await checkTrainerEmail(trimmedCcEmail)
+      if (check === 'refused') {
+        setGroupFormError(`Die Adresse ${trimmedCcEmail} ist auf dem Server nicht als Lehrgangsleitung freigegeben. Ergebnisse könnten an sie nicht versendet werden. Bitte Adresse prüfen oder in TRAINER_EMAILS eintragen lassen.`)
+        setIsGeneratingGroup(false)
+        return
+      }
+      if (check === 'unknown') {
+        setTrainerCheckWarning('Die Adresse der Lehrgangsleitung konnte nicht gegen die Freigabeliste des Servers geprüft werden. Bitte vor dem Versand sicherstellen, dass sie in TRAINER_EMAILS eingetragen ist.')
+      }
+    }
     const results = []
     for (const entry of entries) {
       results.push(await buildInvite(entry.name, entry.email, groupLanguage, sealed, trimmedCcEmail, brand))
@@ -121,11 +158,13 @@ const Invite = () => {
     setBulkText('')
     setSendSummary(false)
     setSealed(false)
+    setGroupFormError(false)
+    setTrainerCheckWarning(false)
   }
 
   const downloadGroupPdf = async event => {
     event.preventDefault()
-    await generateInvitePdf(groupInvites, brand)
+    await generateInvitePdf(groupInvites, brand, sealed)
   }
 
   const sendGroupEmails = async event => {
@@ -294,6 +333,7 @@ const Invite = () => {
                       Lehrgangsmodus aktivieren – Teilnehmende sehen ihr Ergebnis weder im Web noch per E-Mail,
                       es geht ausschließlich an die oben angegebene Lehrgangsleitung.
                     </label>
+                    {groupFormError ? <p className='error-text' role='alert'>{groupFormError}</p> : null}
                     <div>
                       <button className='rdsim-btn rdsim-btn-primary' type='submit' disabled={isGeneratingGroup}>
                         {isGeneratingGroup ? 'Erstelle…' : 'Einladungen erstellen'}
@@ -337,6 +377,7 @@ const Invite = () => {
                       </tbody>
                     </table>
 
+                    {trainerCheckWarning ? <p className='error-text'>{trainerCheckWarning}</p> : null}
                     {sendSummary && sendSummary.error ? <p className='error-text'>{sendSummary.error}</p> : null}
 
                     <div>

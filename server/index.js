@@ -84,6 +84,14 @@ function escapeHtml (value) {
     .replace(/'/g, '&#39;')
 }
 
+// In Lehrgangsmodus the report does leave the participant's browser (mailed to the course lead),
+// so the privacy note must say so instead of promising that nobody else sees the result.
+function privacyNote (lehrgangsmodus) {
+  return lehrgangsmodus
+    ? 'Der Test läuft in Ihrem Browser, Ihre Antworten werden nicht auf einem Server gespeichert. Weil diese Einladung im Lehrgangsmodus läuft, wird Ihr Ergebnisbericht nach dem Absenden einmalig per E-Mail an Ihre Lehrgangsleitung übermittelt. Darüber hinaus erhält niemand Ihre Antworten oder Ihr Ergebnis.'
+    : 'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte - niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.'
+}
+
 function buildEmailText (name, link, lehrgangsmodus) {
   const afterTestLines = lehrgangsmodus
     ? [
@@ -115,7 +123,7 @@ function buildEmailText (name, link, lehrgangsmodus) {
     '',
     ...afterTestLines,
     '',
-    'Datenschutz: Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte - niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.',
+    `Datenschutz: ${privacyNote(lehrgangsmodus)}`,
     '',
     'Viele Grüße',
     'rd-sim.de'
@@ -189,7 +197,7 @@ function buildEmailHtml (name, link, lehrgangsmodus) {
               </div>
 
               <div style="background-color:#fff8ec;border-left:4px solid #f4a01c;padding:14px 18px;font-size:13px;color:#333333;line-height:1.6;">
-                <strong style="color:#c97a00;">Datenschutz:</strong> Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte – niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.
+                <strong style="color:#c97a00;">Datenschutz:</strong> ${escapeHtml(privacyNote(lehrgangsmodus).replace(' - ', ' – '))}
               </div>
             </td>
           </tr>
@@ -422,6 +430,12 @@ app.post('/send-invites', async (req, res) => {
     res.status(400).json({ error: 'ccEmail is not a valid email address' })
     return
   }
+  // In Lehrgangsmodus the results will later be mailed to ccEmail via /send-report, which only
+  // accepts TRAINER_EMAILS. Refuse now, before anyone takes the test, rather than after.
+  if (lehrgangsmodus && (!ccEmail || !isAllowedRecipient(ccEmail))) {
+    res.status(400).json({ error: 'Die Adresse der Lehrgangsleitung ist auf dem Server nicht freigegeben (TRAINER_EMAILS). Ergebnisse könnten an sie nicht versendet werden.' })
+    return
+  }
 
   const results = []
   for (const recipient of recipients) {
@@ -439,6 +453,17 @@ app.post('/send-invites', async (req, res) => {
   }
 
   res.json({ results })
+})
+
+// Lets the invite page check a course lead's address against TRAINER_EMAILS before links go out.
+// Sits behind basic auth like everything under /api/ except /send-report.
+app.post('/check-trainer', (req, res) => {
+  const { email } = req.body || {}
+  if (!isValidEmail(email)) {
+    res.status(400).json({ error: 'email is not a valid email address' })
+    return
+  }
+  res.json({ allowed: isAllowedRecipient(email) })
 })
 
 app.get('/health', (req, res) => {

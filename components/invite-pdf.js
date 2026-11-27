@@ -74,7 +74,7 @@ function drawParagraph (pdf, text, x, y, width, options = {}) {
   return y + lines.length * (options.lineHeight || 11.5)
 }
 
-export default async function generateInvitePdf (invites, brandId) {
+export default async function generateInvitePdf (invites, brandId, sealed) {
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
@@ -160,7 +160,16 @@ export default async function generateInvitePdf (invites, brandId) {
     })
     y += 8
 
-    const noteHeight = 42
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8.5)
+    const privacyLines = pdf.splitTextToSize(
+      sealed
+        ? 'Der Test läuft in Ihrem Browser, Ihre Antworten werden nicht auf einem Server gespeichert. Im Lehrgangsmodus wird Ihr Ergebnisbericht nach dem Absenden einmalig per E-Mail an Ihre Lehrgangsleitung übermittelt. Darüber hinaus erhält niemand Ihre Daten.'
+        : 'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte.',
+      contentWidth - 24
+    )
+    // the Lehrgangsmodus note is longer, so the box grows with the text
+    const noteHeight = 22 + privacyLines.length * 10.5
     pdf.setFillColor(...hexToRgb(brand.noteBackground))
     pdf.rect(MARGIN, y, contentWidth, noteHeight, 'F')
     pdf.setFillColor(...hexToRgb(brand.eyebrow))
@@ -171,10 +180,6 @@ export default async function generateInvitePdf (invites, brandId) {
     pdf.text('Datenschutz:', MARGIN + 12, y + 15)
     pdf.setFont('helvetica', 'normal')
     pdf.setTextColor(...hexToRgb(TEXT))
-    const privacyLines = pdf.splitTextToSize(
-      'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte.',
-      contentWidth - 24
-    )
     pdf.text(privacyLines, MARGIN + 12, y + 27)
 
     pdf.setDrawColor(...hexToRgb(brand.accent))
