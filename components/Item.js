@@ -1,7 +1,7 @@
 import Choices from './Choices'
 
 export default ({ data, answers, setAnswer }) => (
-  <div className='item-wrapper rdsim-card'>
+  <div className='item-wrapper rdsim-card' id={`frage-${data.id}`}>
     <div className='text'>{data.num}. {data.text}</div>
     {data ? <Choices data={data} answers={answers} setAnswer={setAnswer} /> : null}
     <style jsx>

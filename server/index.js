@@ -12,6 +12,19 @@ const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'Big Five Test | rd-sim.de'
 const MAX_RECIPIENTS = 200
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// /send-report is reachable without basic auth, because it is called from the participant's
+// browser. These three settings are what keeps it from being an open mail relay.
+const TRAINER_EMAILS = (process.env.TRAINER_EMAILS || '')
+  .split(',')
+  .map(entry => entry.trim().toLowerCase())
+  .filter(Boolean)
+const ALLOW_SELF_SEND = process.env.ALLOW_SELF_SEND === 'true'
+const MAX_PDF_BYTES = Number(process.env.MAX_PDF_BYTES || 10 * 1024 * 1024)
+
+if (TRAINER_EMAILS.length === 0) {
+  console.warn('TRAINER_EMAILS is not set - every sealed result mail will be rejected')
+}
+
 function isConfigured () {
   return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASSWORD && MAIL_FROM_ADDRESS)
 }
@@ -30,6 +43,38 @@ function isValidEmail (value) {
   return typeof value === 'string' && EMAIL_PATTERN.test(value.trim())
 }
 
+// An allowlist entry is either a full address or a domain written as "@example.org"
+function isAllowedRecipient (email) {
+  const value = email.trim().toLowerCase()
+  return TRAINER_EMAILS.some(entry => entry.startsWith('@') ? value.endsWith(entry) : entry === value)
+}
+
+function emailDomain (email) {
+  return String(email).split('@').pop().toLowerCase()
+}
+
+// Only let through something that really is a PDF, and only up to a sane size
+function decodePdf (pdfBase64) {
+  if (typeof pdfBase64 !== 'string') {
+    return { error: 'pdfBase64 must be a string' }
+  }
+  const data = pdfBase64.includes(',') ? pdfBase64.split(',').pop() : pdfBase64
+  const buffer = Buffer.from(data, 'base64')
+  if (buffer.length === 0) {
+    return { error: 'pdfBase64 is empty or not valid base64' }
+  }
+  if (buffer.length > MAX_PDF_BYTES) {
+    const limit = MAX_PDF_BYTES >= 1024 * 1024
+      ? `${Math.round(MAX_PDF_BYTES / 1024 / 1024)} MB`
+      : `${Math.round(MAX_PDF_BYTES / 1024)} KB`
+    return { error: `attachment too large (max ${limit})` }
+  }
+  if (buffer.toString('latin1', 0, 5) !== '%PDF-') {
+    return { error: 'attachment is not a PDF' }
+  }
+  return { buffer }
+}
+
 function escapeHtml (value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -37,6 +82,14 @@ function escapeHtml (value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
+}
+
+// In Lehrgangsmodus the report does leave the participant's browser (mailed to the course lead),
+// so the privacy note must say so instead of promising that nobody else sees the result.
+function privacyNote (lehrgangsmodus) {
+  return lehrgangsmodus
+    ? 'Der Test läuft in Ihrem Browser, Ihre Antworten werden nicht auf einem Server gespeichert. Weil diese Einladung im Lehrgangsmodus läuft, wird Ihr Ergebnisbericht nach dem Absenden einmalig per E-Mail an Ihre Lehrgangsleitung übermittelt. Darüber hinaus erhält niemand Ihre Antworten oder Ihr Ergebnis.'
+    : 'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte - niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.'
 }
 
 function buildEmailText (name, link, lehrgangsmodus) {
@@ -70,7 +123,7 @@ function buildEmailText (name, link, lehrgangsmodus) {
     '',
     ...afterTestLines,
     '',
-    'Datenschutz: Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte - niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.',
+    `Datenschutz: ${privacyNote(lehrgangsmodus)}`,
     '',
     'Viele Grüße',
     'rd-sim.de'
@@ -144,7 +197,7 @@ function buildEmailHtml (name, link, lehrgangsmodus) {
               </div>
 
               <div style="background-color:#fff8ec;border-left:4px solid #f4a01c;padding:14px 18px;font-size:13px;color:#333333;line-height:1.6;">
-                <strong style="color:#c97a00;">Datenschutz:</strong> Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte – niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.
+                <strong style="color:#c97a00;">Datenschutz:</strong> ${escapeHtml(privacyNote(lehrgangsmodus).replace(' - ', ' – '))}
               </div>
             </td>
           </tr>
@@ -303,8 +356,7 @@ function buildReportEmailHtml (name) {
 </html>`
 }
 
-async function sendReportEmail ({ name, email, pdfBase64, sealed }) {
-  const base64Data = pdfBase64.includes(',') ? pdfBase64.split(',').pop() : pdfBase64
+async function sendReportEmail ({ name, email, pdf, sealed }) {
   await transporter.sendMail({
     from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`,
     to: sealed ? email : `"${name}" <${email}>`,
@@ -313,8 +365,7 @@ async function sendReportEmail ({ name, email, pdfBase64, sealed }) {
     html: sealed ? buildSealedReportEmailHtml(name) : buildReportEmailHtml(name),
     attachments: [{
       filename: 'big-five-ergebnisbericht.pdf',
-      content: base64Data,
-      encoding: 'base64',
+      content: pdf,
       contentType: 'application/pdf'
     }]
   })
@@ -332,8 +383,28 @@ app.post('/send-report', async (req, res) => {
     return
   }
 
+  const isSealed = Boolean(sealed)
+  if (isSealed) {
+    if (!isAllowedRecipient(email)) {
+      console.warn('send-report rejected: recipient not in TRAINER_EMAILS, domain', emailDomain(email))
+      res.status(403).json({ error: 'Die hinterlegte Empfängeradresse ist nicht freigegeben. Bitte wenden Sie sich an Ihre Lehrgangsleitung.' })
+      return
+    }
+  } else if (!ALLOW_SELF_SEND) {
+    console.warn('send-report rejected: self-send is disabled, domain', emailDomain(email))
+    res.status(403).json({ error: 'Der Mailversand an diese Adresse ist deaktiviert. Bitte nutzen Sie den PDF-Download.' })
+    return
+  }
+
+  const { buffer, error: pdfError } = decodePdf(pdfBase64)
+  if (pdfError) {
+    console.warn('send-report rejected:', pdfError)
+    res.status(400).json({ error: pdfError })
+    return
+  }
+
   try {
-    await sendReportEmail({ name, email: email.trim(), pdfBase64, sealed: Boolean(sealed) })
+    await sendReportEmail({ name, email: email.trim(), pdf: buffer, sealed: isSealed })
     res.json({ status: 'sent' })
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -359,6 +430,12 @@ app.post('/send-invites', async (req, res) => {
     res.status(400).json({ error: 'ccEmail is not a valid email address' })
     return
   }
+  // In Lehrgangsmodus the results will later be mailed to ccEmail via /send-report, which only
+  // accepts TRAINER_EMAILS. Refuse now, before anyone takes the test, rather than after.
+  if (lehrgangsmodus && (!ccEmail || !isAllowedRecipient(ccEmail))) {
+    res.status(400).json({ error: 'Die Adresse der Lehrgangsleitung ist auf dem Server nicht freigegeben (TRAINER_EMAILS). Ergebnisse könnten an sie nicht versendet werden.' })
+    return
+  }
 
   const results = []
   for (const recipient of recipients) {
@@ -376,6 +453,17 @@ app.post('/send-invites', async (req, res) => {
   }
 
   res.json({ results })
+})
+
+// Lets the invite page check a course lead's address against TRAINER_EMAILS before links go out.
+// Sits behind basic auth like everything under /api/ except /send-report.
+app.post('/check-trainer', (req, res) => {
+  const { email } = req.body || {}
+  if (!isValidEmail(email)) {
+    res.status(400).json({ error: 'email is not a valid email address' })
+    return
+  }
+  res.json({ allowed: isAllowedRecipient(email) })
 })
 
 app.get('/health', (req, res) => {

@@ -1,12 +1,9 @@
-const RED = '#e63946'
-const ORANGE = '#f4a01c'
-const NAVY = '#0a0e1a'
+import { getBrand, loadBrandLogo } from './report-brands'
+
 const MUTED = '#7a8499'
 const TEXT = '#1a1a1a'
 const BORDER = '#dcdce2'
 const WHITE = '#ffffff'
-const LOGO_URL = '/static/rdsim-favicon.png'
-const HERO_URL = '/static/hero.jpg'
 
 const DOMAIN_COLORS = ['#e63946', '#f4a01c', '#457b9d', '#2a9d8f', '#6c584c']
 
@@ -27,17 +24,6 @@ function hexToRgb (hex) {
 function isLightColor (hex) {
   const [r, g, b] = hexToRgb(hex)
   return (0.299 * r + 0.587 * g + 0.114 * b) > 150
-}
-
-async function loadImageAsDataUrl (url) {
-  const response = await window.fetch(url)
-  const blob = await response.blob()
-  return await new Promise((resolve, reject) => {
-    const reader = new window.FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
 }
 
 export async function loadCoverImage (url, targetWidth, targetHeight) {
@@ -91,27 +77,35 @@ export async function loadCoverImage (url, targetWidth, targetHeight) {
   return canvas.toDataURL('image/jpeg', 0.85)
 }
 
-function drawHeader (pdf, pageWidth, logoDataUrl, participantName, pageNumber) {
-  if (logoDataUrl) {
-    pdf.addImage(logoDataUrl, 'PNG', PAGE_MARGIN, 16, 16, 16)
+// The layout (brand) and its loaded logo travel on the jsPDF instance, so every drawing helper
+// that already receives the pdf can use them without threading two more parameters through.
+function drawHeader (pdf, pageWidth, logo, participantName, pageNumber) {
+  const brand = pdf.brand
+  let textX = PAGE_MARGIN
+  if (logo) {
+    // a full logo with lettering gets more height than a square icon
+    const height = brand.logoIsWordmark ? 28 : 16
+    const width = height * logo.ratio
+    pdf.addImage(logo.dataUrl, logo.format, PAGE_MARGIN, brand.logoIsWordmark ? 10 : 16, width, height)
+    textX += width + 7
   }
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(10.5)
-  pdf.setTextColor(...hexToRgb(NAVY))
-  pdf.text('RD-SIM.DE', PAGE_MARGIN + (logoDataUrl ? 22 : 0), 27)
+  pdf.setTextColor(...hexToRgb(brand.dark))
+  pdf.text(brand.wordmark, textX, 27)
   if (participantName) {
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(8)
     pdf.setTextColor(...hexToRgb(MUTED))
-    pdf.text(participantName, PAGE_MARGIN + (logoDataUrl ? 22 : 0), 37)
+    pdf.text(participantName, textX, 37)
   }
   if (pageNumber) {
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(15)
-    pdf.setTextColor(...hexToRgb(NAVY))
+    pdf.setTextColor(...hexToRgb(brand.dark))
     pdf.text(String(pageNumber).padStart(2, '0'), pageWidth - PAGE_MARGIN, 32, { align: 'right' })
   }
-  pdf.setDrawColor(...hexToRgb(RED))
+  pdf.setDrawColor(...hexToRgb(brand.accent))
   pdf.setLineWidth(1.5)
   pdf.line(PAGE_MARGIN, HEADER_BOTTOM - 8, pageWidth - PAGE_MARGIN, HEADER_BOTTOM - 8)
 }
@@ -205,7 +199,7 @@ function drawTableOfContents (pdf, { contentWidth, sections }) {
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(9)
-  pdf.setTextColor(...hexToRgb(ORANGE))
+  pdf.setTextColor(...hexToRgb(pdf.brand.eyebrow))
   pdf.text('IHR ERGEBNISBERICHT IM ÜBERBLICK', PAGE_MARGIN, y)
   y += 26
 
@@ -314,7 +308,7 @@ function drawNoteBox (pdf, label, text, x, y, width, pageWidth, pageHeight, logo
   const noteLines = pdf.splitTextToSize(text, width - 24)
   const noteHeight = 26 + noteLines.length * 11.5
   const drawnY = ensureSpace(pdf, y, noteHeight + 10, pageWidth, pageHeight, logoDataUrl, participantName)
-  pdf.setFillColor(255, 248, 236)
+  pdf.setFillColor(...hexToRgb(pdf.brand.noteBackground))
   pdf.rect(x, drawnY, width, noteHeight, 'F')
   pdf.setFillColor(...hexToRgb(color))
   pdf.rect(x, drawnY, 3, noteHeight, 'F')
@@ -347,26 +341,26 @@ function measureBulletListHeight (pdf, items, width, options = {}) {
   }, 0)
 }
 
-async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
+async function buildPdfDocument ({ resume, viewLanguage, participantName, brand: brandId }) {
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
   const pageWidth = pdf.internal.pageSize.getWidth()
   const pageHeight = pdf.internal.pageSize.getHeight()
   const contentWidth = pageWidth - PAGE_MARGIN * 2
+  const brand = getBrand(brandId)
+  pdf.brand = brand
 
-  let logoDataUrl = null
-  try {
-    logoDataUrl = await loadImageAsDataUrl(LOGO_URL)
-  } catch (error) {
-    logoDataUrl = null
-  }
+  // named logoDataUrl for history; it is the loaded logo ({ dataUrl, format, ratio }) or null
+  const logoDataUrl = await loadBrandLogo(brand)
 
   const dateStr = new Date().toLocaleDateString('de-DE', { year: 'numeric', month: 'long', day: 'numeric' })
 
   let coverImageDataUrl = null
   try {
-    coverImageDataUrl = await loadCoverImage(HERO_URL, Math.round(pageWidth * 2), Math.round(pageHeight * 2))
+    coverImageDataUrl = brand.coverImageUrl
+      ? await loadCoverImage(brand.coverImageUrl, Math.round(pageWidth * 2), Math.round(pageHeight * 2))
+      : null
   } catch (error) {
     coverImageDataUrl = null
   }
@@ -375,21 +369,32 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   if (coverImageDataUrl) {
     pdf.addImage(coverImageDataUrl, 'JPEG', 0, 0, pageWidth, pageHeight)
   } else {
-    pdf.setFillColor(...hexToRgb(NAVY))
+    pdf.setFillColor(...hexToRgb(brand.dark))
     pdf.rect(0, 0, pageWidth, pageHeight, 'F')
   }
-  if (logoDataUrl) {
-    pdf.addImage(logoDataUrl, 'PNG', pageWidth - PAGE_MARGIN - 22, 34, 22, 22)
+  if (logoDataUrl && brand.logoIsWordmark) {
+    // a coloured logo on a dark cover needs a light card behind it
+    const logoHeight = 84
+    const logoWidth = logoHeight * logoDataUrl.ratio
+    const padding = 14
+    const cardX = pageWidth - PAGE_MARGIN - logoWidth - padding * 2
+    pdf.setFillColor(255, 255, 255)
+    pdf.roundedRect(cardX, 34, logoWidth + padding * 2, logoHeight + padding * 2, 6, 6, 'F')
+    pdf.addImage(logoDataUrl.dataUrl, logoDataUrl.format, cardX + padding, 34 + padding, logoWidth, logoHeight)
+  } else {
+    if (logoDataUrl) {
+      pdf.addImage(logoDataUrl.dataUrl, logoDataUrl.format, pageWidth - PAGE_MARGIN - 22, 34, 22, 22)
+    }
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(11)
+    pdf.setTextColor(255, 255, 255)
+    pdf.text(brand.wordmark, pageWidth - PAGE_MARGIN - (logoDataUrl ? 30 : 0), 50, { align: 'right' })
   }
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(11)
-  pdf.setTextColor(255, 255, 255)
-  pdf.text('RD-SIM.DE', pageWidth - PAGE_MARGIN - (logoDataUrl ? 30 : 0), 50, { align: 'right' })
 
   const coverTitleY = pageHeight - 230
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(10)
-  pdf.setTextColor(...hexToRgb(ORANGE))
+  pdf.setTextColor(...hexToRgb(brand.coverEyebrow))
   pdf.text('BIG FIVE TEST · PERSÖNLICHKEITSANALYSE', PAGE_MARGIN, coverTitleY)
 
   pdf.setFont('helvetica', 'normal')
@@ -399,7 +404,7 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   pdf.setFont('helvetica', 'bold')
   pdf.text('ERGEBNISBERICHT', PAGE_MARGIN, coverTitleY + 78)
 
-  pdf.setDrawColor(...hexToRgb(RED))
+  pdf.setDrawColor(...hexToRgb(brand.coverAccent))
   pdf.setLineWidth(2)
   pdf.line(PAGE_MARGIN, coverTitleY + 96, PAGE_MARGIN + 60, coverTitleY + 96)
 
@@ -426,7 +431,7 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   const summaryStartPage = pdf.internal.getNumberOfPages()
   const sections = [{
     title: 'Kurzfassung',
-    color: NAVY,
+    color: brand.dark,
     startPage: summaryStartPage,
     bullets: ['Ihre stärksten Ausprägungen', 'Kurzeinschätzung für die Führungsrolle']
   }]
@@ -434,7 +439,7 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   let summaryY = HEADER_BOTTOM + 24
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(9)
-  pdf.setTextColor(...hexToRgb(ORANGE))
+  pdf.setTextColor(...hexToRgb(brand.eyebrow))
   pdf.text('BIG FIVE TEST · IHRE ERGEBNISSE IN KÜRZE', PAGE_MARGIN, summaryY)
   summaryY += 24
   drawSplitHeadline(pdf, 'IHRE', 'KERNERGEBNISSE', PAGE_MARGIN, summaryY, 24, TEXT)
@@ -468,20 +473,20 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
   const overviewStartPage = pdf.internal.getNumberOfPages()
   sections.push({
     title: 'Übersicht',
-    color: RED,
+    color: brand.accent,
     startPage: overviewStartPage,
     bullets: ['Gesamtprofil aller fünf Dimensionen', 'Zentrale Kennzahlen im Überblick']
   })
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(9)
-  pdf.setTextColor(...hexToRgb(ORANGE))
+  pdf.setTextColor(...hexToRgb(brand.eyebrow))
   pdf.text('BIG FIVE TEST · DIE ERGEBNISSE AUF EINEN BLICK', PAGE_MARGIN, y)
   y += 24
   drawSplitHeadline(pdf, 'IHR', 'PROFIL', PAGE_MARGIN, y, 24, TEXT)
   y += 28
 
-  y = drawLabelBar(pdf, 'Alle fünf Dimensionen im Vergleich', PAGE_MARGIN, y, contentWidth, RED)
+  y = drawLabelBar(pdf, 'Alle fünf Dimensionen im Vergleich', PAGE_MARGIN, y, contentWidth, brand.accent)
   y += 30
 
   const overviewItems = resume.map(domain => ({ label: domain.title, value: domain.score }))
@@ -550,7 +555,7 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
     y = drawParagraphs(pdf, domain.description, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName)
 
     if (domain.leadershipNote) {
-      y = drawNoteBox(pdf, 'Für Führung im Rettungsdienst', domain.leadershipNote, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, ORANGE)
+      y = drawNoteBox(pdf, 'Für Führung im Rettungsdienst', domain.leadershipNote, PAGE_MARGIN, y, contentWidth, pageWidth, pageHeight, logoDataUrl, participantName, brand.eyebrow)
     }
 
     if (domain.reflectionQuestions && domain.reflectionQuestions.length) {
@@ -613,7 +618,7 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName }) {
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(7.5)
     pdf.setTextColor(...hexToRgb(MUTED))
-    pdf.text('RD-SIM.DE  ·  BIG FIVE TEST', pageWidth / 2, pageHeight - 18, { align: 'center' })
+    pdf.text(`${brand.wordmark}  ·  BIG FIVE TEST`, pageWidth / 2, pageHeight - 18, { align: 'center' })
   }
 
   // --- Accent strip: tags every page of a section with its domain color ---

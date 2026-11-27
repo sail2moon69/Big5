@@ -9,6 +9,20 @@ function getStorageKey (inviteCode) {
   return `big5-test-progress-${inviteCode || 'anonymous'}`
 }
 
+// getItems shuffles on every call. Without remembering the order, a reload shows a different
+// set of questions while the answers stay stored - answered questions seem to vanish.
+function applySavedOrder (items, order) {
+  if (!Array.isArray(order) || order.length !== items.length) {
+    return items
+  }
+  const byId = {}
+  items.forEach(item => { byId[item.id] = item })
+  if (!order.every(id => byId[id])) {
+    return items
+  }
+  return order.map(id => byId[id])
+}
+
 function loadSavedProgress (storageKey) {
   try {
     const raw = window.localStorage.getItem(storageKey)
@@ -27,17 +41,20 @@ const Test = props => {
   const [participantEmail, setParticipantEmail] = useState(false)
   const [participantSealed, setParticipantSealed] = useState(false)
   const [trainerEmail, setTrainerEmail] = useState(false)
+  const [brand, setBrand] = useState(false)
   const [storageKey, setStorageKey] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(false)
 
   const loadLanguage = (language, key) => {
-    const loadedItems = getItems(language, true)
-    loadedItems.reverse()
+    const saved = loadSavedProgress(key)
+    // item ids are the same in every language, so the saved order also survives a language switch
+    const shuffledItems = getItems(language, true)
+    shuffledItems.reverse()
+    const loadedItems = applySavedOrder(shuffledItems, saved && saved.order)
     setSelectedLanguage(language)
     setItems(loadedItems)
 
-    const saved = loadSavedProgress(key)
     if (saved && saved.answers && typeof saved.revealedCount === 'number') {
       setAnswers(saved.answers)
       setRevealedCount(saved.revealedCount)
@@ -59,6 +76,7 @@ const Test = props => {
         setParticipantEmail(invite.email || false)
         setParticipantSealed(Boolean(invite.sealed && invite.trainerEmail))
         setTrainerEmail(invite.trainerEmail || false)
+        setBrand(invite.brand || false)
       } catch (error) {
         setParticipantName(false)
         setParticipantEmail(false)
@@ -72,15 +90,16 @@ const Test = props => {
   }, [])
 
   useEffect(() => {
-    if (!storageKey || revealedCount === false) {
+    if (!storageKey || revealedCount === false || items === false) {
       return
     }
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify({ answers, revealedCount }))
+      const order = items.map(item => item.id)
+      window.localStorage.setItem(storageKey, JSON.stringify({ answers, revealedCount, order }))
     } catch (error) {
       // localStorage unavailable (e.g. private browsing quota) - progress just won't survive a reload
     }
-  }, [answers, revealedCount, storageKey])
+  }, [answers, revealedCount, storageKey, items])
 
   const handleLanguageChange = event => {
     loadLanguage(event.target.value, storageKey)
@@ -110,6 +129,10 @@ const Test = props => {
     if (isSubmitting) {
       return
     }
+    if (items !== false && Object.keys(answers).length < items.length) {
+      setSubmitError('Bitte beantworten Sie alle Fragen, bevor Sie den Test absenden.')
+      return
+    }
     setIsSubmitting(true)
     setSubmitError(false)
     try {
@@ -132,6 +155,9 @@ const Test = props => {
       }
       if (participantEmail) {
         result.email = participantEmail
+      }
+      if (brand) {
+        result.brand = brand
       }
       if (participantSealed) {
         result.sealed = true
@@ -157,6 +183,21 @@ const Test = props => {
 
   const answeredCount = Object.keys(answers).length
   const totalCount = items !== false ? items.length : 120
+  // an unanswered item quietly skews the facet it belongs to, so the test has to be complete
+  const unansweredItems = items !== false ? items.filter(item => !(item.id in answers)) : []
+  const isComplete = items !== false && unansweredItems.length === 0
+
+  const scrollToFirstUnanswered = event => {
+    event.preventDefault()
+    const first = unansweredItems[0]
+    if (!first) {
+      return
+    }
+    const element = window.document.getElementById(`frage-${first.id}`)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
   const progressPercent = totalCount ? Math.round((answeredCount / totalCount) * 100) : 0
   const visibleItems = items !== false && revealedCount !== false
     ? items.slice(Math.max(items.length - revealedCount, 0))
@@ -171,6 +212,15 @@ const Test = props => {
         <div className='rdsim-eyebrow'>Persönlichkeitstest</div>
         <h1 className='rdsim-title'>Big Five<span className='dot'>.</span></h1>
         {participantName ? <p className='greeting'>Hallo, <strong>{participantName}</strong>!</p> : null}
+        {participantSealed
+          ? (
+            <p className='sealed-note'>
+              <strong>Lehrgangsmodus:</strong> Ihr Ergebnis wird Ihnen nicht angezeigt. Nach dem Absenden geht Ihr
+              Ergebnisbericht einmalig per E-Mail an Ihre Lehrgangsleitung ({trainerEmail}) und wird im Lehrgang mit
+              Ihnen besprochen.
+            </p>
+            )
+          : null}
 
         {items !== false
           ? (
@@ -203,9 +253,17 @@ const Test = props => {
         {items !== false && revealedCount === items.length
           ? (
             <div className='submit-wrapper'>
-              <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit} disabled={isSubmitting}>
+              <button className='rdsim-btn rdsim-btn-primary' onClick={handleSubmit} disabled={isSubmitting || !isComplete}>
                 {isSubmitting ? 'Wird gesendet…' : 'Absenden'}
               </button>
+              {!isComplete
+                ? (
+                  <p className='submit-hint'>
+                    Noch {unansweredItems.length} {unansweredItems.length === 1 ? 'Frage ist' : 'Fragen sind'} unbeantwortet.{' '}
+                    <a href='#' onClick={scrollToFirstUnanswered}>Zur ersten offenen Frage</a>
+                  </p>
+                  )
+                : null}
               {submitError ? <p className='submit-error'>{submitError}</p> : null}
             </div>
             )
@@ -217,6 +275,14 @@ const Test = props => {
               text-align: center;
               color: var(--rdsim-text);
               margin-bottom: 10px;
+            }
+            .sealed-note {
+              text-align: center;
+              color: var(--rdsim-text);
+              font-size: 14px;
+              max-width: 560px;
+              margin: 0 auto 16px;
+              overflow-wrap: anywhere;
             }
             .progress-wrapper {
               max-width: 480px;
@@ -266,6 +332,15 @@ const Test = props => {
             }
             .submit-wrapper {
               text-align: center;
+            }
+            .submit-hint {
+              color: var(--rdsim-text);
+              font-size: 14px;
+              max-width: 480px;
+              margin: 12px auto 0;
+            }
+            .submit-hint a {
+              color: var(--rdsim-red);
             }
             .submit-error {
               color: var(--rdsim-red);
