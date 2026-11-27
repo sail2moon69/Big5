@@ -28,16 +28,16 @@ export const BRANDS = {
     label: 'SiNA Krefeld',
     wordmark: 'SINA-KREFELD.ORG',
     // The full SiNA logo (heads + lettering). If the file is missing, the PDFs show the
-    // wordmark in the brand green instead.
+    // wordmark in the brand green instead. Greens are taken from the logo (#216b4a).
     logoUrl: '/static/sina-logo.png',
     logoIsWordmark: true,
     coverImageUrl: false,
-    dark: '#1f5c32',
-    accent: '#2e7d3f',
-    eyebrow: '#5f9e3a',
-    coverEyebrow: '#b9dc9f',
-    coverAccent: '#8cc63f',
-    noteBackground: '#eef6ea'
+    dark: '#174d35',
+    accent: '#216b4a',
+    eyebrow: '#2f8a60',
+    coverEyebrow: '#a9d8c0',
+    coverAccent: '#6fc69a',
+    noteBackground: '#ebf5f0'
   }
 }
 
