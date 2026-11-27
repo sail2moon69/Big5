@@ -1,13 +1,9 @@
 import { loadCoverImage } from './pdf-report'
+import { getBrand, loadBrandLogo } from './report-brands'
 
-const RED = '#e63946'
-const ORANGE = '#f4a01c'
-const NAVY = '#0a0e1a'
 const MUTED = '#7a8499'
 const TEXT = '#1a1a1a'
 const BORDER = '#dcdce2'
-const LOGO_URL = '/static/rdsim-favicon.png'
-const HERO_URL = '/static/hero.jpg'
 
 const MARGIN = 50
 const BANNER_HEIGHT = 165
@@ -21,32 +17,30 @@ function hexToRgb (hex) {
   ]
 }
 
-async function loadImageAsDataUrl (url) {
-  const response = await window.fetch(url)
-  const blob = await response.blob()
-  return await new Promise((resolve, reject) => {
-    const reader = new window.FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
-
-function drawBanner (pdf, pageWidth, heroDataUrl, logoDataUrl) {
+function drawBanner (pdf, pageWidth, heroDataUrl, logo, brand) {
   if (heroDataUrl) {
     pdf.addImage(heroDataUrl, 'JPEG', 0, 0, pageWidth, BANNER_HEIGHT)
   } else {
-    pdf.setFillColor(...hexToRgb(NAVY))
+    pdf.setFillColor(...hexToRgb(brand.dark))
     pdf.rect(0, 0, pageWidth, BANNER_HEIGHT, 'F')
   }
 
-  if (logoDataUrl) {
-    pdf.addImage(logoDataUrl, 'PNG', MARGIN, 18, 18, 18)
+  if (logo && brand.logoIsWordmark) {
+    // coloured logo with lettering: on a light card so it stays readable on the dark banner
+    const height = 40
+    const width = height * logo.ratio
+    pdf.setFillColor(255, 255, 255)
+    pdf.roundedRect(MARGIN - 6, 14, width + 12, height + 12, 4, 4, 'F')
+    pdf.addImage(logo.dataUrl, logo.format, MARGIN, 20, width, height)
+  } else {
+    if (logo) {
+      pdf.addImage(logo.dataUrl, logo.format, MARGIN, 18, 18, 18)
+    }
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(11)
+    pdf.setTextColor(255, 255, 255)
+    pdf.text(brand.wordmark, MARGIN + (logo ? 24 : 0), 30)
   }
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(11)
-  pdf.setTextColor(255, 255, 255)
-  pdf.text('RD-SIM.DE', MARGIN + (logoDataUrl ? 24 : 0), 30)
 
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(22)
@@ -54,10 +48,10 @@ function drawBanner (pdf, pageWidth, heroDataUrl, logoDataUrl) {
   pdf.text('BIG FIVE TEST', pageWidth / 2, 95, { align: 'center' })
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9.5)
-  pdf.setTextColor(...hexToRgb(ORANGE))
+  pdf.setTextColor(...hexToRgb(brand.coverEyebrow))
   pdf.text('PERSÖNLICHE EINLADUNG', pageWidth / 2, 113, { align: 'center' })
 
-  pdf.setDrawColor(...hexToRgb(RED))
+  pdf.setDrawColor(...hexToRgb(brand.coverAccent))
   pdf.setLineWidth(2)
   pdf.line(pageWidth / 2 - 24, 125, pageWidth / 2 + 24, 125)
 }
@@ -80,7 +74,7 @@ function drawParagraph (pdf, text, x, y, width, options = {}) {
   return y + lines.length * (options.lineHeight || 11.5)
 }
 
-export default async function generateInvitePdf (invites) {
+export default async function generateInvitePdf (invites, brandId, sealed) {
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
@@ -88,16 +82,14 @@ export default async function generateInvitePdf (invites) {
   const pageHeight = pdf.internal.pageSize.getHeight()
   const contentWidth = pageWidth - MARGIN * 2
 
-  let logoDataUrl = null
-  try {
-    logoDataUrl = await loadImageAsDataUrl(LOGO_URL)
-  } catch (error) {
-    logoDataUrl = null
-  }
+  const brand = getBrand(brandId)
+  const logo = await loadBrandLogo(brand)
 
   let heroDataUrl = null
   try {
-    heroDataUrl = await loadCoverImage(HERO_URL, Math.round(pageWidth * 2), Math.round(BANNER_HEIGHT * 2))
+    heroDataUrl = brand.coverImageUrl
+      ? await loadCoverImage(brand.coverImageUrl, Math.round(pageWidth * 2), Math.round(BANNER_HEIGHT * 2))
+      : null
   } catch (error) {
     heroDataUrl = null
   }
@@ -107,7 +99,7 @@ export default async function generateInvitePdf (invites) {
       pdf.addPage()
     }
 
-    drawBanner(pdf, pageWidth, heroDataUrl, logoDataUrl)
+    drawBanner(pdf, pageWidth, heroDataUrl, logo, brand)
 
     let y = BANNER_HEIGHT + 28
     pdf.setFont('helvetica', 'bold')
@@ -168,30 +160,35 @@ export default async function generateInvitePdf (invites) {
     })
     y += 8
 
-    const noteHeight = 42
-    pdf.setFillColor(255, 248, 236)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8.5)
+    const privacyLines = pdf.splitTextToSize(
+      sealed
+        ? 'Der Test läuft in Ihrem Browser, Ihre Antworten werden nicht auf einem Server gespeichert. Im Lehrgangsmodus wird Ihr Ergebnisbericht nach dem Absenden einmalig per E-Mail an Ihre Lehrgangsleitung übermittelt. Darüber hinaus erhält niemand Ihre Daten.'
+        : 'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte.',
+      contentWidth - 24
+    )
+    // the Lehrgangsmodus note is longer, so the box grows with the text
+    const noteHeight = 22 + privacyLines.length * 10.5
+    pdf.setFillColor(...hexToRgb(brand.noteBackground))
     pdf.rect(MARGIN, y, contentWidth, noteHeight, 'F')
-    pdf.setFillColor(...hexToRgb(ORANGE))
+    pdf.setFillColor(...hexToRgb(brand.eyebrow))
     pdf.rect(MARGIN, y, 3, noteHeight, 'F')
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(8.5)
-    pdf.setTextColor(...hexToRgb(ORANGE))
+    pdf.setTextColor(...hexToRgb(brand.eyebrow))
     pdf.text('Datenschutz:', MARGIN + 12, y + 15)
     pdf.setFont('helvetica', 'normal')
     pdf.setTextColor(...hexToRgb(TEXT))
-    const privacyLines = pdf.splitTextToSize(
-      'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte.',
-      contentWidth - 24
-    )
     pdf.text(privacyLines, MARGIN + 12, y + 27)
 
-    pdf.setDrawColor(...hexToRgb(RED))
+    pdf.setDrawColor(...hexToRgb(brand.accent))
     pdf.setLineWidth(1)
     pdf.line(pageWidth / 2 - 28, pageHeight - 38, pageWidth / 2 + 28, pageHeight - 38)
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(8.5)
     pdf.setTextColor(...hexToRgb(MUTED))
-    pdf.text('RD-SIM.DE', pageWidth / 2, pageHeight - 22, { align: 'center' })
+    pdf.text(brand.wordmark, pageWidth / 2, pageHeight - 22, { align: 'center' })
   })
 
   pdf.save('big-five-einladungen.pdf')

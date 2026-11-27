@@ -2,11 +2,16 @@ import { useState } from 'react'
 import Head from 'next/head'
 import Page from '../components/Page'
 import generateInvitePdf from '../components/invite-pdf'
+import { BRAND_OPTIONS, DEFAULT_BRAND } from '../components/report-brands'
 const { getInfo } = require('@alheimsins/b5-johnson-120-ipip-neo-pi-r')
 const { pack } = require('jcb64')
 
-async function buildInvite (name, email, language, sealed, trainerEmail) {
+async function buildInvite (name, email, language, sealed, trainerEmail, brand) {
   const payload = { name, language }
+  // only a non-default layout goes into the link, so existing links and their length stay as they were
+  if (brand && brand !== DEFAULT_BRAND) {
+    payload.brand = brand
+  }
   if (email) {
     payload.email = email
   }
@@ -25,6 +30,25 @@ async function buildInvite (name, email, language, sealed, trainerEmail) {
   return { name, email, link, qrDataUrl }
 }
 
+// 'allowed' | 'refused' | 'unknown' (server unreachable, not logged in, or an older server
+// without the endpoint) - only 'refused' blocks creating the links
+async function checkTrainerEmail (email) {
+  try {
+    const response = await window.fetch('/api/check-trainer', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email })
+    })
+    if (!response.ok) {
+      return 'unknown'
+    }
+    const data = await response.json()
+    return data.allowed ? 'allowed' : 'refused'
+  } catch (error) {
+    return 'unknown'
+  }
+}
+
 function parseBulkLine (line) {
   const [namePart, emailPart] = line.split(';')
   const name = (namePart || '').trim()
@@ -35,6 +59,8 @@ function parseBulkLine (line) {
 const Invite = () => {
   const { languages } = getInfo()
   const [mode, setMode] = useState('single')
+  // layout of the PDFs (invitation and result report); shared by single and group mode
+  const [brand, setBrand] = useState(DEFAULT_BRAND)
 
   // single-invite mode
   const [name, setName] = useState('')
@@ -53,6 +79,9 @@ const Invite = () => {
   const [isGeneratingGroup, setIsGeneratingGroup] = useState(false)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
   const [sendSummary, setSendSummary] = useState(false)
+  // problems found before the links exist (shown in the form) and a non-blocking hint after
+  const [groupFormError, setGroupFormError] = useState(false)
+  const [trainerCheckWarning, setTrainerCheckWarning] = useState(false)
 
   const generateInvite = async event => {
     event.preventDefault()
@@ -61,7 +90,7 @@ const Invite = () => {
       return
     }
     setIsGenerating(true)
-    const result = await buildInvite(trimmedName, email.trim() || false, language)
+    const result = await buildInvite(trimmedName, email.trim() || false, language, false, false, brand)
     setInvite(result)
     setIsGenerating(false)
   }
@@ -86,8 +115,10 @@ const Invite = () => {
       return
     }
     const trimmedCcEmail = ccEmail.trim()
+    setGroupFormError(false)
+    setTrainerCheckWarning(false)
     if (sealed && !trimmedCcEmail) {
-      setSendSummary({ error: 'Im Lehrgangsmodus ist die E-Mail-Adresse der Lehrgangsleitung ein Pflichtfeld.' })
+      setGroupFormError('Im Lehrgangsmodus ist die E-Mail-Adresse der Lehrgangsleitung ein Pflichtfeld.')
       return
     }
     const entries = bulkText
@@ -100,9 +131,22 @@ const Invite = () => {
     }
     setIsGeneratingGroup(true)
     setSendSummary(false)
+    if (sealed) {
+      // The results will only ever be mailed to addresses the server allows (TRAINER_EMAILS).
+      // Find out now, not after the whole course has taken the test.
+      const check = await checkTrainerEmail(trimmedCcEmail)
+      if (check === 'refused') {
+        setGroupFormError(`Die Adresse ${trimmedCcEmail} ist auf dem Server nicht als Lehrgangsleitung freigegeben. Ergebnisse könnten an sie nicht versendet werden. Bitte Adresse prüfen oder in TRAINER_EMAILS eintragen lassen.`)
+        setIsGeneratingGroup(false)
+        return
+      }
+      if (check === 'unknown') {
+        setTrainerCheckWarning('Die Adresse der Lehrgangsleitung konnte nicht gegen die Freigabeliste des Servers geprüft werden. Bitte vor dem Versand sicherstellen, dass sie in TRAINER_EMAILS eingetragen ist.')
+      }
+    }
     const results = []
     for (const entry of entries) {
-      results.push(await buildInvite(entry.name, entry.email, groupLanguage, sealed, trimmedCcEmail))
+      results.push(await buildInvite(entry.name, entry.email, groupLanguage, sealed, trimmedCcEmail, brand))
     }
     setGroupInvites(results)
     setIsGeneratingGroup(false)
@@ -114,11 +158,13 @@ const Invite = () => {
     setBulkText('')
     setSendSummary(false)
     setSealed(false)
+    setGroupFormError(false)
+    setTrainerCheckWarning(false)
   }
 
   const downloadGroupPdf = async event => {
     event.preventDefault()
-    await generateInvitePdf(groupInvites)
+    await generateInvitePdf(groupInvites, brand, sealed)
   }
 
   const sendGroupEmails = async event => {
@@ -200,6 +246,14 @@ const Invite = () => {
                         <option value={lang.id} key={lang.id}>{lang.text}</option>
                       ))}
                     </select>
+                    <label className='brand-label'>
+                      Layout des Ergebnisberichts
+                      <select className='rdsim-select' value={brand} onChange={event => setBrand(event.target.value)}>
+                        {BRAND_OPTIONS.map(option => (
+                          <option value={option.id} key={option.id}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <div>
                       <button className='rdsim-btn rdsim-btn-primary' type='submit' disabled={isGenerating}>
                         {isGenerating ? 'Erstelle…' : 'Einladung erstellen'}
@@ -254,6 +308,14 @@ const Invite = () => {
                         <option value={lang.id} key={lang.id}>{lang.text}</option>
                       ))}
                     </select>
+                    <label className='brand-label'>
+                      Layout des Ergebnisberichts
+                      <select className='rdsim-select' value={brand} onChange={event => setBrand(event.target.value)}>
+                        {BRAND_OPTIONS.map(option => (
+                          <option value={option.id} key={option.id}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <input
                       className='rdsim-input'
                       type='email'
@@ -271,6 +333,7 @@ const Invite = () => {
                       Lehrgangsmodus aktivieren – Teilnehmende sehen ihr Ergebnis weder im Web noch per E-Mail,
                       es geht ausschließlich an die oben angegebene Lehrgangsleitung.
                     </label>
+                    {groupFormError ? <p className='error-text' role='alert'>{groupFormError}</p> : null}
                     <div>
                       <button className='rdsim-btn rdsim-btn-primary' type='submit' disabled={isGeneratingGroup}>
                         {isGeneratingGroup ? 'Erstelle…' : 'Einladungen erstellen'}
@@ -314,6 +377,7 @@ const Invite = () => {
                       </tbody>
                     </table>
 
+                    {trainerCheckWarning ? <p className='error-text'>{trainerCheckWarning}</p> : null}
                     {sendSummary && sendSummary.error ? <p className='error-text'>{sendSummary.error}</p> : null}
 
                     <div>
@@ -332,6 +396,15 @@ const Invite = () => {
           {`
             select {
               margin-top: 10px;
+            }
+            .brand-label {
+              display: block;
+              margin-top: 10px;
+              font-size: 14px;
+            }
+            .brand-label select {
+              display: block;
+              margin: 4px auto 0;
             }
             .link-field {
               width: 100%;

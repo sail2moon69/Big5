@@ -31,6 +31,11 @@ function decorateResume (resume, language) {
   })
 }
 
+// Mailing the report to oneself only works when the mail service allows it (ALLOW_SELF_SEND in
+// server/.env). The page is a static export, so it learns that at build time - set
+// NEXT_PUBLIC_ALLOW_SELF_SEND=true for the build in that case, otherwise the field stays hidden.
+const SELF_SEND_ENABLED = process.env.NEXT_PUBLIC_ALLOW_SELF_SEND === 'true'
+
 export default class Result extends Component {
   constructor (props) {
     super(props)
@@ -102,7 +107,7 @@ export default class Result extends Component {
     this.setState({ sealedSendStatus: 'sending', sealedCopyStatus: false })
     try {
       const participantName = results.name || 'Teilnehmer:in'
-      const { dataUri } = await generatePdfReportDataUri({ resume, viewLanguage: language, participantName: results.name })
+      const { dataUri } = await generatePdfReportDataUri({ resume, viewLanguage: language, participantName: results.name, brand: results.brand })
       const response = await window.fetch('/api/send-report', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -263,13 +268,13 @@ export default class Result extends Component {
     }
     this.setState({ isGeneratingPdf: true })
     const participantName = this.state.results && this.state.results.name
-    await generatePdfReport({ resume: this.state.resume, viewLanguage: this.state.viewLanguage, participantName })
+    await generatePdfReport({ resume: this.state.resume, viewLanguage: this.state.viewLanguage, participantName, brand: this.state.results && this.state.results.brand })
     this.setState({ isGeneratingPdf: false })
   }
 
   async handleSendReport (e) {
     e.preventDefault()
-    if (this.state.resume === false || this.state.isSendingReport) {
+    if (!SELF_SEND_ENABLED || this.state.resume === false || this.state.isSendingReport) {
       return
     }
     const email = this.state.recipientEmail.trim()
@@ -283,7 +288,8 @@ export default class Result extends Component {
       const { dataUri } = await generatePdfReportDataUri({
         resume: this.state.resume,
         viewLanguage: this.state.viewLanguage,
-        participantName: this.state.results && this.state.results.name
+        participantName: this.state.results && this.state.results.name,
+        brand: this.state.results && this.state.results.brand
       })
       const response = await window.fetch('/api/send-report', {
         method: 'POST',
@@ -441,7 +447,7 @@ export default class Result extends Component {
           {this.state.resume !== false
             ? <button className='rdsim-btn rdsim-btn-primary' onClick={this.handleDownloadPdf} disabled={this.state.isGeneratingPdf}>{this.state.isGeneratingPdf ? 'PDF wird erstellt…' : 'PDF herunterladen'}</button>
             : null}
-          {this.state.resume !== false
+          {SELF_SEND_ENABLED && this.state.resume !== false
             ? (
               <div className='send-report'>
                 <input
