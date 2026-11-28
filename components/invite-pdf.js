@@ -17,6 +17,16 @@ function hexToRgb (hex) {
   ]
 }
 
+// jsPDF leaves the letter spacing out when it right-aligns, so the line would stick out past
+// the margin; place it from the measured width instead
+function drawSpacedTextRight (pdf, text, rightX, y, charSpace) {
+  // jsPDF also adds the spacing after the last letter
+  const width = pdf.getTextWidth(text) + charSpace * text.length
+  pdf.setCharSpace(charSpace)
+  pdf.text(text, rightX - width, y)
+  pdf.setCharSpace(0)
+}
+
 // White header: logo on the left, title on the right, one thin accent rule underneath
 function drawLightBanner (pdf, pageWidth, logo, brand) {
   if (logo) {
@@ -36,9 +46,7 @@ function drawLightBanner (pdf, pageWidth, logo, brand) {
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(8.5)
   pdf.setTextColor(...hexToRgb(brand.eyebrow))
-  pdf.setCharSpace(1.2)
-  pdf.text('PERSÖNLICHE EINLADUNG', pageWidth - MARGIN, 88, { align: 'right' })
-  pdf.setCharSpace(0)
+  drawSpacedTextRight(pdf, 'PERSÖNLICHE EINLADUNG', pageWidth - MARGIN, 88, 1.2)
 
   pdf.setDrawColor(...hexToRgb(BORDER))
   pdf.setLineWidth(0.6)
