@@ -1,5 +1,8 @@
 const express = require('express')
 const nodemailer = require('nodemailer')
+const db = require('./db')
+const security = require('./security')
+const { createCourseRouter, scheduleCleanup } = require('./courses')
 
 const PORT = process.env.PORT || 4001
 const SMTP_HOST = process.env.SMTP_HOST
@@ -21,6 +24,15 @@ const TRAINER_EMAILS = (process.env.TRAINER_EMAILS || '')
 const ALLOW_SELF_SEND = process.env.ALLOW_SELF_SEND === 'true'
 const MAX_PDF_BYTES = Number(process.env.MAX_PDF_BYTES || 10 * 1024 * 1024)
 
+// Lehrgangsverwaltung: only active when the database and the encryption key are configured.
+// Without them the service runs exactly as before (links only, nothing stored).
+const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://big5.rd-sim.de').replace(/\/+$/, '')
+const DATA_KEY = security.loadDataKey(process.env.BIG5_DATA_KEY)
+const COURSES_ENABLED = Boolean(DATA_KEY && process.env.PGDATABASE)
+if (!COURSES_ENABLED) {
+  console.warn('PGDATABASE or BIG5_DATA_KEY not set - course management (/app) is disabled')
+}
+
 if (TRAINER_EMAILS.length === 0) {
   console.warn('TRAINER_EMAILS is not set - every sealed result mail will be rejected')
 }
@@ -37,6 +49,28 @@ const transporter = nodemailer.createTransport({
 })
 
 const app = express()
+// behind nginx on the same host: take the client address from X-Forwarded-For
+app.set('trust proxy', 'loopback')
+
+if (COURSES_ENABLED) {
+  // registered before the 20 MB parser below: course requests are small
+  app.use('/app', express.json({ limit: '200kb' }), createCourseRouter({
+    dataKey: DATA_KEY,
+    buildLink: token => `${PUBLIC_URL}/test?t=${encodeURIComponent(token)}`,
+    sendInvite: async ({ name, email, link, courseName, showResult }) => {
+      if (!isConfigured()) {
+        throw new Error('Mail service is not configured on the server')
+      }
+      await sendEmail({ name, email, link, mode: 'stored', showResult, courseName })
+    },
+    secureCookies: process.env.BIG5_INSECURE_COOKIES !== 'true'
+  }))
+} else {
+  app.use('/app', (req, res) => {
+    res.status(503).json({ error: 'Die Lehrgangsverwaltung ist auf diesem Server nicht eingerichtet.' })
+  })
+}
+
 app.use(express.json({ limit: '20mb' }))
 
 function isValidEmail (value) {
@@ -86,26 +120,35 @@ function escapeHtml (value) {
 
 // In Lehrgangsmodus the report does leave the participant's browser (mailed to the course lead),
 // so the privacy note must say so instead of promising that nobody else sees the result.
-function privacyNote (lehrgangsmodus) {
-  return lehrgangsmodus
+// mode: 'open' (link only), 'sealed' (report mailed to the course lead), 'stored' (Lehrgangsverwaltung)
+function privacyNote (mode) {
+  if (mode === 'stored') {
+    return 'Ihre Antworten werden nach dem Absenden verschlüsselt auf dem Server von rd-sim.de gespeichert. Zugriff hat nur Ihre Lehrgangsleitung. Die Daten werden nach Ende des Lehrgangs automatisch gelöscht. Einzelheiten finden Sie in der Einwilligung vor Testbeginn.'
+  }
+  return mode === 'sealed'
     ? 'Der Test läuft in Ihrem Browser, Ihre Antworten werden nicht auf einem Server gespeichert. Weil diese Einladung im Lehrgangsmodus läuft, wird Ihr Ergebnisbericht nach dem Absenden einmalig per E-Mail an Ihre Lehrgangsleitung übermittelt. Darüber hinaus erhält niemand Ihre Antworten oder Ihr Ergebnis.'
     : 'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte - niemand außer Ihnen sieht Ihre Antworten oder Ihr Ergebnis.'
 }
 
-function buildEmailText (name, link, lehrgangsmodus) {
-  const afterTestLines = lehrgangsmodus
-    ? [
-        'Nach dem Test',
-        'Diese Einladung läuft im Lehrgangsmodus: Ihr Ergebnis wird Ihnen nicht direkt angezeigt oder zugesandt. Es geht automatisch an Ihre Lehrgangsleitung und wird im Rahmen des Lehrgangs persönlich mit Ihnen besprochen.'
-      ]
-    : [
-        'Nach dem Test',
-        'Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.'
-      ]
+function afterTestText (mode, showResult) {
+  if (mode === 'stored') {
+    return showResult
+      ? 'Ihr Ergebnis wird Ihnen nach dem Absenden direkt angezeigt und Ihrer Lehrgangsleitung zur Verfügung gestellt. Es wird im Rahmen des Lehrgangs mit Ihnen besprochen.'
+      : 'Ihr Ergebnis wird Ihnen nicht direkt angezeigt. Es steht Ihrer Lehrgangsleitung zur Verfügung und wird im Rahmen des Lehrgangs persönlich mit Ihnen besprochen.'
+  }
+  return mode === 'sealed'
+    ? 'Diese Einladung läuft im Lehrgangsmodus: Ihr Ergebnis wird Ihnen nicht direkt angezeigt oder zugesandt. Es geht automatisch an Ihre Lehrgangsleitung und wird im Rahmen des Lehrgangs persönlich mit Ihnen besprochen.'
+    : 'Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.'
+}
+
+function buildEmailText (name, link, mode, { showResult, courseName } = {}) {
+  const afterTestLines = ['Nach dem Test', afterTestText(mode, showResult)]
   return [
     `Hallo ${name},`,
     '',
-    'Sie wurden zum Big Five Persönlichkeitstest eingeladen.',
+    courseName
+      ? `Sie wurden im Rahmen des Lehrgangs „${courseName}“ zum Big Five Persönlichkeitstest eingeladen.`
+      : 'Sie wurden zum Big Five Persönlichkeitstest eingeladen.',
     '',
     `Ihr persönlicher Link: ${link}`,
     '',
@@ -123,20 +166,21 @@ function buildEmailText (name, link, lehrgangsmodus) {
     '',
     ...afterTestLines,
     '',
-    `Datenschutz: ${privacyNote(lehrgangsmodus)}`,
+    `Datenschutz: ${privacyNote(mode)}`,
     '',
     'Viele Grüße',
     'rd-sim.de'
   ].join('\n')
 }
 
-function buildEmailHtml (name, link, lehrgangsmodus) {
+function buildEmailHtml (name, link, mode, { showResult, courseName } = {}) {
   const safeName = escapeHtml(name)
   const safeLink = escapeHtml(link)
   const afterTestHeading = 'Nach dem Test'
-  const afterTestText = lehrgangsmodus
-    ? 'Diese Einladung läuft im Lehrgangsmodus: Ihr Ergebnis wird Ihnen nicht direkt angezeigt oder zugesandt. Es geht automatisch an Ihre Lehrgangsleitung und wird im Rahmen des Lehrgangs persönlich mit Ihnen besprochen.'
-    : 'Die Ergebnisse werden im Rahmen des Kurses ausführlich besprochen. Drucken Sie sich Ihren PDF-Report nach Abschluss des Tests daher am besten aus und bringen Sie ihn zum Kurs mit.'
+  const afterTest = afterTestText(mode, showResult)
+  const intro = courseName
+    ? `Sie wurden im Rahmen des Lehrgangs <strong>${escapeHtml(courseName)}</strong> zum <strong>Big Five Persönlichkeitstest</strong> eingeladen.`
+    : 'Sie wurden zum <strong>Big Five Persönlichkeitstest</strong> eingeladen.'
   return `<!DOCTYPE html>
 <html lang="de">
 <body style="margin:0;padding:0;background-color:#f4f4f6;font-family:Arial,Helvetica,sans-serif;">
@@ -167,7 +211,7 @@ function buildEmailHtml (name, link, lehrgangsmodus) {
           <tr>
             <td style="padding:32px;">
               <p style="margin:0 0 16px;font-size:16px;color:#1a1a1a;">Hallo ${safeName},</p>
-              <p style="margin:0 0 16px;font-size:15px;color:#333333;line-height:1.6;">Sie wurden zum <strong>Big Five Persönlichkeitstest</strong> eingeladen.</p>
+              <p style="margin:0 0 16px;font-size:15px;color:#333333;line-height:1.6;">${intro}</p>
 
               <div style="text-align:center;margin:28px 0;">
                 <a href="${safeLink}" style="background-color:#e63946;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:2px;font-weight:bold;letter-spacing:0.5px;text-transform:uppercase;font-size:14px;display:inline-block;">Test jetzt starten</a>
@@ -193,11 +237,11 @@ function buildEmailHtml (name, link, lehrgangsmodus) {
 
               <h2 style="font-size:14px;text-transform:uppercase;letter-spacing:0.5px;color:#1a1a1a;margin:0 0 8px;">${afterTestHeading}</h2>
               <div style="background-color:#f4f7fb;border-left:4px solid #0a0e1a;padding:14px 18px;margin:0 0 20px;font-size:14px;color:#333333;line-height:1.6;">
-                ${afterTestText}
+                ${afterTest}
               </div>
 
               <div style="background-color:#fff8ec;border-left:4px solid #f4a01c;padding:14px 18px;font-size:13px;color:#333333;line-height:1.6;">
-                <strong style="color:#c97a00;">Datenschutz:</strong> ${escapeHtml(privacyNote(lehrgangsmodus).replace(' - ', ' – '))}
+                <strong style="color:#c97a00;">Datenschutz:</strong> ${escapeHtml(privacyNote(mode).replace(' - ', ' – '))}
               </div>
             </td>
           </tr>
@@ -214,14 +258,14 @@ function buildEmailHtml (name, link, lehrgangsmodus) {
 </html>`
 }
 
-async function sendEmail ({ name, email, link, ccEmail, lehrgangsmodus }) {
+async function sendEmail ({ name, email, link, ccEmail, mode, showResult, courseName }) {
   await transporter.sendMail({
     from: `"${MAIL_FROM_NAME}" <${MAIL_FROM_ADDRESS}>`,
     to: `"${name}" <${email}>`,
     cc: ccEmail || undefined,
     subject: 'Ihre persönliche Einladung zum Big Five Test',
-    text: buildEmailText(name, link, lehrgangsmodus),
-    html: buildEmailHtml(name, link, lehrgangsmodus)
+    text: buildEmailText(name, link, mode, { showResult, courseName }),
+    html: buildEmailHtml(name, link, mode, { showResult, courseName })
   })
 }
 
@@ -445,7 +489,7 @@ app.post('/send-invites', async (req, res) => {
       continue
     }
     try {
-      await sendEmail({ name, email: email.trim(), link, ccEmail, lehrgangsmodus: Boolean(lehrgangsmodus) })
+      await sendEmail({ name, email: email.trim(), link, ccEmail, mode: lehrgangsmodus ? 'sealed' : 'open' })
       results.push({ name, email, status: 'sent' })
     } catch (error) {
       results.push({ name, email, status: 'failed', reason: error.message })
@@ -466,10 +510,27 @@ app.post('/check-trainer', (req, res) => {
   res.json({ allowed: isAllowedRecipient(email) })
 })
 
-app.get('/health', (req, res) => {
-  res.json({ ok: true, configured: isConfigured() })
+app.get('/health', async (req, res) => {
+  let database = 'disabled'
+  if (COURSES_ENABLED) {
+    database = await db.query('SELECT 1').then(() => 'ok', () => 'error')
+  }
+  res.json({ ok: true, configured: isConfigured(), courses: COURSES_ENABLED, database })
 })
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`big5-invite-api listening on 127.0.0.1:${PORT}`)
-})
+async function start () {
+  if (COURSES_ENABLED) {
+    // a database that is down must not take the invite mails with it - /app answers 500 until it is back
+    try {
+      await db.migrate()
+      scheduleCleanup()
+    } catch (error) {
+      console.error('database migration failed, course management unavailable:', error.message)
+    }
+  }
+  app.listen(PORT, '127.0.0.1', () => {
+    console.log(`big5-invite-api listening on 127.0.0.1:${PORT}`)
+  })
+}
+
+start()

@@ -5,31 +5,12 @@ import Resume from '../components/Resume'
 import AddResults from '../components/AddResults'
 import LoadFile from '../components/LoadFile'
 import generatePdfReport, { generatePdfReportDataUri } from '../components/pdf-report'
-import { getLeadershipNote, getReflectionQuestions } from '../components/result-leadership-notes'
-import { translateScoreText } from '../components/score-text'
+import { decorateResume } from '../components/build-resume'
 const { unpack } = require('jcb64')
 const calculateScore = require('@alheimsins/bigfive-calculate-score')
 const getResult = require('@alheimsins/b5-result-text')
 const { getInfo } = require('@alheimsins/b5-result-text')
 const FileSaver = require('file-saver')
-
-function decorateResume (resume, language) {
-  return resume.map(domain => {
-    // look up leadership notes/reflection questions by the library's raw (always-English) scoreText,
-    // before it gets translated for display below
-    const leadershipNote = getLeadershipNote(domain.domain, domain.scoreText, language)
-    const reflectionQuestions = getReflectionQuestions(domain.domain, language)
-    const facets = domain.facets
-      ? domain.facets.map(facet => Object.assign({}, facet, { scoreText: translateScoreText(facet.scoreText, language) }))
-      : domain.facets
-    return Object.assign({}, domain, {
-      scoreText: translateScoreText(domain.scoreText, language),
-      leadershipNote,
-      reflectionQuestions,
-      facets
-    })
-  })
-}
 
 // Mailing the report to oneself only works when the mail service allows it (ALLOW_SELF_SEND in
 // server/.env). The page is a static export, so it learns that at build time - set

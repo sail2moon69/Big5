@@ -23,6 +23,9 @@ const Navbar = () => (
             HTTP request entirely and bypass that check. */}
         <a href='/invite'>Einladung</a>
       </li>
+      <li className='trainer-only'>
+        <a href='/dashboard'>Lehrgänge</a>
+      </li>
       <li>
         <Link href='/result'>
           <a>Ergebnis</a>
@@ -97,6 +100,12 @@ const Navbar = () => (
       }
       @media screen and (max-width: 500px) {
         .app-name, .sep {
+          display: none;
+        }
+      }
+      @media screen and (max-width: 640px) {
+        /* the dashboard is used at a desk; on a phone the link only crowds the participants' menu */
+        .trainer-only {
           display: none;
         }
       }

@@ -17,7 +17,42 @@ function hexToRgb (hex) {
   ]
 }
 
+// White header: logo on the left, title on the right, one thin accent rule underneath
+function drawLightBanner (pdf, pageWidth, logo, brand) {
+  if (logo) {
+    const height = brand.logoIsWordmark ? 62 : 26
+    const width = Math.min(height * logo.ratio, 220)
+    pdf.addImage(logo.dataUrl, logo.format, MARGIN, 40, width, width / logo.ratio)
+  } else {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(12)
+    pdf.setTextColor(...hexToRgb(brand.dark))
+    pdf.text(brand.wordmark, MARGIN, 70)
+  }
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(20)
+  pdf.setTextColor(...hexToRgb(TEXT))
+  pdf.text('Big Five Test', pageWidth - MARGIN, 72, { align: 'right' })
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8.5)
+  pdf.setTextColor(...hexToRgb(brand.eyebrow))
+  pdf.setCharSpace(1.2)
+  pdf.text('PERSÖNLICHE EINLADUNG', pageWidth - MARGIN, 88, { align: 'right' })
+  pdf.setCharSpace(0)
+
+  pdf.setDrawColor(...hexToRgb(BORDER))
+  pdf.setLineWidth(0.6)
+  pdf.line(MARGIN, 122, pageWidth - MARGIN, 122)
+  pdf.setDrawColor(...hexToRgb(brand.accent))
+  pdf.setLineWidth(2.2)
+  pdf.line(MARGIN, 122, MARGIN + 56, 122)
+}
+
 function drawBanner (pdf, pageWidth, heroDataUrl, logo, brand) {
+  if (brand.style === 'light') {
+    drawLightBanner(pdf, pageWidth, logo, brand)
+    return
+  }
   if (heroDataUrl) {
     pdf.addImage(heroDataUrl, 'JPEG', 0, 0, pageWidth, BANNER_HEIGHT)
   } else {
@@ -74,7 +109,15 @@ function drawParagraph (pdf, text, x, y, width, options = {}) {
   return y + lines.length * (options.lineHeight || 11.5)
 }
 
-export default async function generateInvitePdf (invites, brandId, sealed) {
+const PRIVACY_TEXTS = {
+  open: 'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte.',
+  sealed: 'Der Test läuft in Ihrem Browser, Ihre Antworten werden nicht auf einem Server gespeichert. Im Lehrgangsmodus wird Ihr Ergebnisbericht nach dem Absenden einmalig per E-Mail an Ihre Lehrgangsleitung übermittelt. Darüber hinaus erhält niemand Ihre Daten.',
+  stored: 'Ihre Antworten werden nach dem Absenden verschlüsselt auf dem Server von rd-sim.de gespeichert. Zugriff hat nur Ihre Lehrgangsleitung, die Daten werden nach Ende des Lehrgangs automatisch gelöscht. Vor Testbeginn erhalten Sie alle Hinweise und entscheiden selbst über Ihre Einwilligung.'
+}
+
+// privacy: 'open' | 'sealed' | 'stored'; true/false still work for the older two modes
+export default async function generateInvitePdf (invites, brandId, privacy, options = {}) {
+  const privacyMode = privacy === true ? 'sealed' : (PRIVACY_TEXTS[privacy] ? privacy : 'open')
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
@@ -84,10 +127,11 @@ export default async function generateInvitePdf (invites, brandId, sealed) {
 
   const brand = getBrand(brandId)
   const logo = await loadBrandLogo(brand)
+  const isLight = brand.style === 'light'
 
   let heroDataUrl = null
   try {
-    heroDataUrl = brand.coverImageUrl
+    heroDataUrl = !isLight && brand.coverImageUrl
       ? await loadCoverImage(brand.coverImageUrl, Math.round(pageWidth * 2), Math.round(BANNER_HEIGHT * 2))
       : null
   } catch (error) {
@@ -102,6 +146,13 @@ export default async function generateInvitePdf (invites, brandId, sealed) {
     drawBanner(pdf, pageWidth, heroDataUrl, logo, brand)
 
     let y = BANNER_HEIGHT + 28
+    if (options.courseName) {
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9)
+      pdf.setTextColor(...hexToRgb(MUTED))
+      pdf.text(pdf.splitTextToSize(`Lehrgang: ${options.courseName}`, contentWidth)[0], pageWidth / 2, y - 6, { align: 'center' })
+      y += 14
+    }
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(18)
     pdf.setTextColor(...hexToRgb(TEXT))
@@ -119,8 +170,14 @@ export default async function generateInvitePdf (invites, brandId, sealed) {
     y += instructions.length * 12 + 14
 
     const qrSize = 130
+    if (isLight) {
+      // a thin frame instead of a coloured area keeps the page calm
+      pdf.setDrawColor(...hexToRgb(BORDER))
+      pdf.setLineWidth(0.8)
+      pdf.roundedRect(pageWidth / 2 - qrSize / 2 - 10, y - 10, qrSize + 20, qrSize + 20, 8, 8, 'S')
+    }
     pdf.addImage(invite.qrDataUrl, 'PNG', pageWidth / 2 - qrSize / 2, y, qrSize, qrSize)
-    y += qrSize + 14
+    y += qrSize + (isLight ? 22 : 14)
 
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(8)
@@ -162,12 +219,7 @@ export default async function generateInvitePdf (invites, brandId, sealed) {
 
     pdf.setFont('helvetica', 'normal')
     pdf.setFontSize(8.5)
-    const privacyLines = pdf.splitTextToSize(
-      sealed
-        ? 'Der Test läuft in Ihrem Browser, Ihre Antworten werden nicht auf einem Server gespeichert. Im Lehrgangsmodus wird Ihr Ergebnisbericht nach dem Absenden einmalig per E-Mail an Ihre Lehrgangsleitung übermittelt. Darüber hinaus erhält niemand Ihre Daten.'
-        : 'Der Test läuft vollständig in Ihrem Browser. Es gibt keine Serverspeicherung und keine Übermittlung an Dritte.',
-      contentWidth - 24
-    )
+    const privacyLines = pdf.splitTextToSize(PRIVACY_TEXTS[privacyMode], contentWidth - 24)
     // the Lehrgangsmodus note is longer, so the box grows with the text
     const noteHeight = 22 + privacyLines.length * 10.5
     pdf.setFillColor(...hexToRgb(brand.noteBackground))
@@ -191,5 +243,5 @@ export default async function generateInvitePdf (invites, brandId, sealed) {
     pdf.text(brand.wordmark, pageWidth / 2, pageHeight - 22, { align: 'center' })
   })
 
-  pdf.save('big-five-einladungen.pdf')
+  pdf.save(options.filename || 'big-five-einladungen.pdf')
 }

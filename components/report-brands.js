@@ -16,6 +16,8 @@ export const BRANDS = {
     // square icon, drawn next to the wordmark
     logoIsWordmark: false,
     coverImageUrl: '/static/hero.jpg',
+    // 'dark': full-bleed cover and banner; 'light': white pages with thin accent lines
+    style: 'dark',
     dark: '#0a0e1a',
     accent: '#e63946',
     eyebrow: '#f4a01c',
@@ -32,12 +34,13 @@ export const BRANDS = {
     logoUrl: '/static/sina-logo.png',
     logoIsWordmark: true,
     coverImageUrl: false,
+    style: 'light',
     dark: '#174d35',
     accent: '#216b4a',
     eyebrow: '#2f8a60',
-    coverEyebrow: '#a9d8c0',
-    coverAccent: '#6fc69a',
-    noteBackground: '#ebf5f0'
+    coverEyebrow: '#2f8a60',
+    coverAccent: '#216b4a',
+    noteBackground: '#f1f7f4'
   }
 }
 

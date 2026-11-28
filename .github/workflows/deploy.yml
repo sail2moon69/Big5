@@ -63,7 +63,20 @@ jobs:
             echo "MAIL_FROM_NAME=Big Five Test | rd-sim.de"
             printf 'TRAINER_EMAILS=%s\n' '${{ secrets.TRAINER_EMAILS }}'
             printf 'ALLOW_SELF_SEND=%s\n' '${{ vars.ALLOW_SELF_SEND || 'false' }}'
+            echo "PUBLIC_URL=https://big5.rd-sim.de"
+            # Lehrgangsverwaltung only once both secrets exist (see server/setup-big5-db.sh)
+            if [ -n '${{ secrets.BIG5_DB_PASSWORD }}' ] && [ -n '${{ secrets.BIG5_DATA_KEY }}' ]; then
+              echo "PGHOST=127.0.0.1"
+              echo "PGPORT=5432"
+              echo "PGUSER=big5"
+              echo "PGDATABASE=big5"
+              printf 'PGPASSWORD=%s\n' '${{ secrets.BIG5_DB_PASSWORD }}'
+              printf 'BIG5_DATA_KEY=%s\n' '${{ secrets.BIG5_DATA_KEY }}'
+            fi
           } > /tmp/invite-api.env
+          if [ -z '${{ secrets.BIG5_DB_PASSWORD }}' ] || [ -z '${{ secrets.BIG5_DATA_KEY }}' ]; then
+            echo "::warning::BIG5_DB_PASSWORD/BIG5_DATA_KEY fehlen - Lehrgangsverwaltung bleibt deaktiviert."
+          fi
           chmod 600 /tmp/invite-api.env
           rsync -avz /tmp/invite-api.env "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/invite-api/.env"
           ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "export XDG_RUNTIME_DIR=/run/user/\$(id -u) && cd /var/www/big5.rd-sim.de/invite-api && npm ci --omit=dev && systemctl --user restart big5-invite-api"
