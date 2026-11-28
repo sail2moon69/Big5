@@ -48,6 +48,9 @@ jobs:
 
       - name: Deploy invite-api backend service
         run: |
+          if [ -z '${{ secrets.TRAINER_EMAILS }}' ]; then
+            echo "::warning::Secret TRAINER_EMAILS ist leer - Ergebnisversand im Lehrgangsmodus wird vom Server abgelehnt."
+          fi
           ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "mkdir -p /var/www/big5.rd-sim.de/invite-api"
           rsync -avz --delete --exclude node_modules server/ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/invite-api/"
           {
@@ -58,6 +61,8 @@ jobs:
             printf 'SMTP_PASSWORD=%s\n' '${{ secrets.SMTP_PASSWORD }}'
             printf 'MAIL_FROM_ADDRESS=%s\n' '${{ secrets.MAIL_FROM_ADDRESS }}'
             echo "MAIL_FROM_NAME=Big Five Test | rd-sim.de"
+            printf 'TRAINER_EMAILS=%s\n' '${{ secrets.TRAINER_EMAILS }}'
+            printf 'ALLOW_SELF_SEND=%s\n' '${{ vars.ALLOW_SELF_SEND || 'false' }}'
           } > /tmp/invite-api.env
           chmod 600 /tmp/invite-api.env
           rsync -avz /tmp/invite-api.env "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/big5.rd-sim.de/invite-api/.env"
