@@ -17,50 +17,51 @@ function hexToRgb (hex) {
   ]
 }
 
-// jsPDF leaves the letter spacing out when it right-aligns, so the line would stick out past
-// the margin; place it from the measured width instead
-function drawSpacedTextRight (pdf, text, rightX, y, charSpace) {
-  // jsPDF also adds the spacing after the last letter
-  const width = pdf.getTextWidth(text) + charSpace * text.length
-  pdf.setCharSpace(charSpace)
-  pdf.text(text, rightX - width, y)
-  pdf.setCharSpace(0)
-}
-
-// White header: logo on the left, title on the right, one thin accent rule underneath
-function drawLightBanner (pdf, pageWidth, logo, brand) {
+// Light layout: logo top left, course name top right, then a centred title block with
+// "Persönliche Einladung" as the headline. No letter-spaced text: PDF viewers disagree on
+// how wide it is, so it never lines up reliably. Returns the y where the name goes.
+function drawLightBanner (pdf, pageWidth, logo, brand, courseName) {
+  const contentWidth = pageWidth - MARGIN * 2
   if (logo) {
-    const height = brand.logoIsWordmark ? 62 : 26
-    const width = Math.min(height * logo.ratio, 220)
-    pdf.addImage(logo.dataUrl, logo.format, MARGIN, 40, width, width / logo.ratio)
+    const height = brand.logoIsWordmark ? 52 : 24
+    const width = Math.min(height * logo.ratio, 200)
+    pdf.addImage(logo.dataUrl, logo.format, MARGIN, 34, width, width / logo.ratio)
   } else {
     pdf.setFont('helvetica', 'bold')
     pdf.setFontSize(12)
     pdf.setTextColor(...hexToRgb(brand.dark))
-    pdf.text(brand.wordmark, MARGIN, 70)
+    pdf.text(brand.wordmark, MARGIN, 64)
   }
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(20)
-  pdf.setTextColor(...hexToRgb(TEXT))
-  pdf.text('Big Five Test', pageWidth - MARGIN, 72, { align: 'right' })
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8.5)
-  pdf.setTextColor(...hexToRgb(brand.eyebrow))
-  drawSpacedTextRight(pdf, 'PERSÖNLICHE EINLADUNG', pageWidth - MARGIN, 88, 1.2)
+  if (courseName) {
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(8.5)
+    pdf.setTextColor(...hexToRgb(MUTED))
+    pdf.text('Lehrgang', pageWidth - MARGIN, 56, { align: 'right' })
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10.5)
+    pdf.setTextColor(...hexToRgb(TEXT))
+    pdf.text(pdf.splitTextToSize(courseName, contentWidth / 2)[0], pageWidth - MARGIN, 70, { align: 'right' })
+  }
 
   pdf.setDrawColor(...hexToRgb(BORDER))
   pdf.setLineWidth(0.6)
-  pdf.line(MARGIN, 122, pageWidth - MARGIN, 122)
+  pdf.line(MARGIN, 100, pageWidth - MARGIN, 100)
+
+  const centre = pageWidth / 2
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9.5)
+  pdf.setTextColor(...hexToRgb(brand.eyebrow))
+  pdf.text('BIG FIVE PERSÖNLICHKEITSTEST', centre, 136, { align: 'center' })
+  pdf.setFontSize(28)
+  pdf.setTextColor(...hexToRgb(TEXT))
+  pdf.text('Persönliche Einladung', centre, 166, { align: 'center' })
   pdf.setDrawColor(...hexToRgb(brand.accent))
   pdf.setLineWidth(2.2)
-  pdf.line(MARGIN, 122, MARGIN + 56, 122)
+  pdf.line(centre - 24, 182, centre + 24, 182)
+  return 210
 }
 
 function drawBanner (pdf, pageWidth, heroDataUrl, logo, brand) {
-  if (brand.style === 'light') {
-    drawLightBanner(pdf, pageWidth, logo, brand)
-    return
-  }
   if (heroDataUrl) {
     pdf.addImage(heroDataUrl, 'JPEG', 0, 0, pageWidth, BANNER_HEIGHT)
   } else {
@@ -151,10 +152,14 @@ export default async function generateInvitePdf (invites, brandId, privacy, opti
       pdf.addPage()
     }
 
-    drawBanner(pdf, pageWidth, heroDataUrl, logo, brand)
-
-    let y = BANNER_HEIGHT + 28
-    if (options.courseName) {
+    let y
+    if (isLight) {
+      y = drawLightBanner(pdf, pageWidth, logo, brand, options.courseName)
+    } else {
+      drawBanner(pdf, pageWidth, heroDataUrl, logo, brand)
+      y = BANNER_HEIGHT + 28
+    }
+    if (options.courseName && !isLight) {
       pdf.setFont('helvetica', 'normal')
       pdf.setFontSize(9)
       pdf.setTextColor(...hexToRgb(MUTED))
