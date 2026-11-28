@@ -139,6 +139,18 @@ function drawSplitHeadline (pdf, regularText, boldText, x, y, fontSize, color) {
 
 function drawLabelBar (pdf, text, x, y, width, color) {
   const height = 22
+  if (pdf.brand.style === 'light') {
+    // light layout: tinted strip with a coloured edge instead of a solid colour block
+    pdf.setFillColor(...hexToRgb(pdf.brand.noteBackground))
+    pdf.rect(x, y, width, height, 'F')
+    pdf.setFillColor(...hexToRgb(color))
+    pdf.rect(x, y, 3, height, 'F')
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(10)
+    pdf.setTextColor(...hexToRgb(TEXT))
+    pdf.text(text.toUpperCase(), x + 14, y + height / 2 + 3.5)
+    return y + height
+  }
   const textColor = isLightColor(color) ? TEXT : WHITE
   pdf.setFillColor(...hexToRgb(color))
   pdf.rect(x, y, width, height, 'F')
@@ -165,6 +177,31 @@ function drawDomainBand (pdf, pageWidth, y0, contentWidth, color, eyebrow, title
   const titleY = eyebrowY + 22
   const subtitleStartY = titleY + (titleLines.length - 1) * 21 + 20
   const bandHeight = (subtitleStartY - y0) + Math.max(subtitleLines.length - 1, 0) * 12 + 22
+
+  if (pdf.brand.style === 'light') {
+    // no full-width colour band: coloured eyebrow and a short rule carry the domain colour
+    pdf.setTextColor(...hexToRgb(color))
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(8.5)
+    pdf.text(eyebrow.toUpperCase(), x, eyebrowY)
+    pdf.setTextColor(...hexToRgb(TEXT))
+    pdf.setFontSize(18)
+    pdf.text(titleLines, x, titleY)
+    if (subtitleLines.length) {
+      pdf.setFont('helvetica', 'normal')
+      pdf.setFontSize(9.5)
+      pdf.setTextColor(...hexToRgb(MUTED))
+      pdf.text(subtitleLines, x, subtitleStartY)
+    }
+    const ruleY = y0 + bandHeight - 4
+    pdf.setDrawColor(...hexToRgb(BORDER))
+    pdf.setLineWidth(0.6)
+    pdf.line(x, ruleY, x + contentWidth, ruleY)
+    pdf.setDrawColor(...hexToRgb(color))
+    pdf.setLineWidth(2.2)
+    pdf.line(x, ruleY, x + 56, ruleY)
+    return y0 + bandHeight + 22
+  }
 
   pdf.setFillColor(...hexToRgb(color))
   pdf.rect(0, y0, pageWidth, bandHeight, 'F')
@@ -341,6 +378,62 @@ function measureBulletListHeight (pdf, items, width, options = {}) {
   }, 0)
 }
 
+// White cover for the light layout: logo top left, title in the lower half, thin accent rules
+function drawLightCover (pdf, { pageWidth, pageHeight, logo, brand, participantName, dateStr }) {
+  if (logo) {
+    const height = brand.logoIsWordmark ? 96 : 34
+    const width = Math.min(height * logo.ratio, pageWidth - PAGE_MARGIN * 2)
+    pdf.addImage(logo.dataUrl, logo.format, PAGE_MARGIN, 56, width, width / logo.ratio)
+  } else {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(13)
+    pdf.setTextColor(...hexToRgb(brand.dark))
+    pdf.text(brand.wordmark, PAGE_MARGIN, 80)
+  }
+
+  const titleY = pageHeight * 0.52
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(...hexToRgb(brand.eyebrow))
+  pdf.setCharSpace(1.5)
+  pdf.text('BIG FIVE TEST · PERSÖNLICHKEITSANALYSE', PAGE_MARGIN, titleY)
+  pdf.setCharSpace(0)
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(30)
+  pdf.setTextColor(...hexToRgb(TEXT))
+  pdf.text('Ihr persönlicher', PAGE_MARGIN, titleY + 42)
+  pdf.setFont('helvetica', 'bold')
+  pdf.text('Ergebnisbericht', PAGE_MARGIN, titleY + 78)
+
+  pdf.setDrawColor(...hexToRgb(brand.accent))
+  pdf.setLineWidth(2.2)
+  pdf.line(PAGE_MARGIN, titleY + 100, PAGE_MARGIN + 56, titleY + 100)
+
+  let infoY = titleY + 132
+  if (participantName) {
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(14)
+    pdf.setTextColor(...hexToRgb(TEXT))
+    pdf.text(participantName, PAGE_MARGIN, infoY)
+    infoY += 20
+  }
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(10)
+  pdf.setTextColor(...hexToRgb(MUTED))
+  pdf.text(`Erstellt am ${dateStr}`, PAGE_MARGIN, infoY)
+
+  // footer rule with the wordmark, mirroring the inner pages
+  pdf.setDrawColor(...hexToRgb(BORDER))
+  pdf.setLineWidth(0.6)
+  pdf.line(PAGE_MARGIN, pageHeight - 56, pageWidth - PAGE_MARGIN, pageHeight - 56)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(...hexToRgb(MUTED))
+  pdf.text(brand.wordmark, PAGE_MARGIN, pageHeight - 40)
+  pdf.text('Vertraulich – nur für die persönliche Reflexion', pageWidth - PAGE_MARGIN, pageHeight - 40, { align: 'right' })
+}
+
 async function buildPdfDocument ({ resume, viewLanguage, participantName, brand: brandId }) {
   const { jsPDF } = await import('jspdf')
   // eslint-disable-next-line new-cap
@@ -358,7 +451,7 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName, brand:
 
   let coverImageDataUrl = null
   try {
-    coverImageDataUrl = brand.coverImageUrl
+    coverImageDataUrl = brand.style !== 'light' && brand.coverImageUrl
       ? await loadCoverImage(brand.coverImageUrl, Math.round(pageWidth * 2), Math.round(pageHeight * 2))
       : null
   } catch (error) {
@@ -366,60 +459,64 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName, brand:
   }
 
   // --- Cover page ---
-  if (coverImageDataUrl) {
-    pdf.addImage(coverImageDataUrl, 'JPEG', 0, 0, pageWidth, pageHeight)
+  if (brand.style === 'light') {
+    drawLightCover(pdf, { pageWidth, pageHeight, logo: logoDataUrl, brand, participantName, dateStr })
   } else {
-    pdf.setFillColor(...hexToRgb(brand.dark))
-    pdf.rect(0, 0, pageWidth, pageHeight, 'F')
-  }
-  if (logoDataUrl && brand.logoIsWordmark) {
-    // a coloured logo on a dark cover needs a light card behind it
-    const logoHeight = 84
-    const logoWidth = logoHeight * logoDataUrl.ratio
-    const padding = 14
-    const cardX = pageWidth - PAGE_MARGIN - logoWidth - padding * 2
-    pdf.setFillColor(255, 255, 255)
-    pdf.roundedRect(cardX, 34, logoWidth + padding * 2, logoHeight + padding * 2, 6, 6, 'F')
-    pdf.addImage(logoDataUrl.dataUrl, logoDataUrl.format, cardX + padding, 34 + padding, logoWidth, logoHeight)
-  } else {
-    if (logoDataUrl) {
-      pdf.addImage(logoDataUrl.dataUrl, logoDataUrl.format, pageWidth - PAGE_MARGIN - 22, 34, 22, 22)
+    if (coverImageDataUrl) {
+      pdf.addImage(coverImageDataUrl, 'JPEG', 0, 0, pageWidth, pageHeight)
+    } else {
+      pdf.setFillColor(...hexToRgb(brand.dark))
+      pdf.rect(0, 0, pageWidth, pageHeight, 'F')
     }
+    if (logoDataUrl && brand.logoIsWordmark) {
+      // a coloured logo on a dark cover needs a light card behind it
+      const logoHeight = 84
+      const logoWidth = logoHeight * logoDataUrl.ratio
+      const padding = 14
+      const cardX = pageWidth - PAGE_MARGIN - logoWidth - padding * 2
+      pdf.setFillColor(255, 255, 255)
+      pdf.roundedRect(cardX, 34, logoWidth + padding * 2, logoHeight + padding * 2, 6, 6, 'F')
+      pdf.addImage(logoDataUrl.dataUrl, logoDataUrl.format, cardX + padding, 34 + padding, logoWidth, logoHeight)
+    } else {
+      if (logoDataUrl) {
+        pdf.addImage(logoDataUrl.dataUrl, logoDataUrl.format, pageWidth - PAGE_MARGIN - 22, 34, 22, 22)
+      }
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(11)
+      pdf.setTextColor(255, 255, 255)
+      pdf.text(brand.wordmark, pageWidth - PAGE_MARGIN - (logoDataUrl ? 30 : 0), 50, { align: 'right' })
+    }
+
+    const coverTitleY = pageHeight - 230
     pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(11)
+    pdf.setFontSize(10)
+    pdf.setTextColor(...hexToRgb(brand.coverEyebrow))
+    pdf.text('BIG FIVE TEST · PERSÖNLICHKEITSANALYSE', PAGE_MARGIN, coverTitleY)
+
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(30)
     pdf.setTextColor(255, 255, 255)
-    pdf.text(brand.wordmark, pageWidth - PAGE_MARGIN - (logoDataUrl ? 30 : 0), 50, { align: 'right' })
-  }
-
-  const coverTitleY = pageHeight - 230
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(10)
-  pdf.setTextColor(...hexToRgb(brand.coverEyebrow))
-  pdf.text('BIG FIVE TEST · PERSÖNLICHKEITSANALYSE', PAGE_MARGIN, coverTitleY)
-
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(30)
-  pdf.setTextColor(255, 255, 255)
-  pdf.text('IHR PERSÖNLICHER', PAGE_MARGIN, coverTitleY + 42)
-  pdf.setFont('helvetica', 'bold')
-  pdf.text('ERGEBNISBERICHT', PAGE_MARGIN, coverTitleY + 78)
-
-  pdf.setDrawColor(...hexToRgb(brand.coverAccent))
-  pdf.setLineWidth(2)
-  pdf.line(PAGE_MARGIN, coverTitleY + 96, PAGE_MARGIN + 60, coverTitleY + 96)
-
-  let coverInfoY = coverTitleY + 128
-  if (participantName) {
+    pdf.text('IHR PERSÖNLICHER', PAGE_MARGIN, coverTitleY + 42)
     pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(14)
-    pdf.setTextColor(255, 255, 255)
-    pdf.text(participantName, PAGE_MARGIN, coverInfoY)
-    coverInfoY += 20
+    pdf.text('ERGEBNISBERICHT', PAGE_MARGIN, coverTitleY + 78)
+
+    pdf.setDrawColor(...hexToRgb(brand.coverAccent))
+    pdf.setLineWidth(2)
+    pdf.line(PAGE_MARGIN, coverTitleY + 96, PAGE_MARGIN + 60, coverTitleY + 96)
+
+    let coverInfoY = coverTitleY + 128
+    if (participantName) {
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(14)
+      pdf.setTextColor(255, 255, 255)
+      pdf.text(participantName, PAGE_MARGIN, coverInfoY)
+      coverInfoY += 20
+    }
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    pdf.setTextColor(210, 213, 222)
+    pdf.text(`Erstellt am ${dateStr}`, PAGE_MARGIN, coverInfoY)
   }
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10)
-  pdf.setTextColor(210, 213, 222)
-  pdf.text(`Erstellt am ${dateStr}`, PAGE_MARGIN, coverInfoY)
 
   // --- Reserve a table-of-contents page; filled in once we know how the report paginates ---
   pdf.addPage()
@@ -625,8 +722,9 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName, brand:
   sections.forEach(section => {
     for (let p = section.startPage; p <= section.endPage; p++) {
       pdf.setPage(p)
+      const stripWidth = brand.style === 'light' ? 4 : STRIP_WIDTH
       pdf.setFillColor(...hexToRgb(section.color))
-      pdf.rect(pageWidth - STRIP_WIDTH, 0, STRIP_WIDTH, pageHeight, 'F')
+      pdf.rect(pageWidth - stripWidth, 0, stripWidth, pageHeight, 'F')
     }
   })
 
@@ -645,6 +743,11 @@ async function buildPdfDocument ({ resume, viewLanguage, participantName, brand:
 export default async function generatePdfReport (args) {
   const { pdf, filename } = await buildPdfDocument(args)
   pdf.save(filename)
+}
+
+export async function generatePdfReportBlob (args) {
+  const { pdf, filename } = await buildPdfDocument(args)
+  return { blob: pdf.output('blob'), filename }
 }
 
 export async function generatePdfReportDataUri (args) {

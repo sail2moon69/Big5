@@ -14,6 +14,7 @@
 
 # --- in den http{}-Block (z. B. /etc/nginx/nginx.conf), nicht in server{} ---
 # limit_req_zone $binary_remote_addr zone=sendreport:10m rate=10r/m;
+# limit_req_zone $binary_remote_addr zone=big5app:10m rate=60r/m;
 
 # --- ab hier in den server{}-Block der Site ---
 
@@ -31,6 +32,23 @@ location = /api/send-report {
     proxy_pass http://127.0.0.1:4001/send-report;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
+}
+
+# Lehrgangsverwaltung (NEU): ohne Basic Auth. Die Lehrgangsleitung meldet sich mit
+# eigenem Konto an (Session-Cookie), Teilnehmende nutzen ihren persönlichen Token-Link.
+# Der Dienst prüft beides selbst. Der längere Präfix gewinnt gegen "location /api/".
+location /api/app/ {
+    auth_basic off;
+
+    limit_req zone=big5app burst=30 nodelay;
+    client_max_body_size 1m;
+    proxy_read_timeout 120s;
+
+    proxy_pass http://127.0.0.1:4001/app/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 
 # Alles andere unter /api/ (insbesondere /api/send-invites) bleibt geschützt.
